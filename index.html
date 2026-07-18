@@ -12,7 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/rovocar.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <div class="road-lines" aria-hidden="true"></div>
@@ -165,10 +165,24 @@
     </form>
   </dialog>
 
+  <dialog id="installDialog">
+    <div class="dialog-form install-guide">
+      <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
+      <p class="eyebrow">INSTALL ON IPHONE</p><h2>홈 화면에 RoVoCar 추가</h2>
+      <p class="dialog-copy">iPhone과 iPad의 Safari에서는 아래 순서로 설치해 주세요.</p>
+      <ol class="install-steps">
+        <li><span class="install-step-icon" aria-hidden="true">↥</span><div><b>Safari의 공유 버튼 누르기</b><small>화면 아래의 사각형과 위쪽 화살표 아이콘입니다.</small></div></li>
+        <li><span class="install-step-icon" aria-hidden="true">＋</span><div><b>홈 화면에 추가 선택</b><small>메뉴를 아래로 내리면 찾을 수 있어요.</small></div></li>
+        <li><span class="install-step-icon" aria-hidden="true">✓</span><div><b>오른쪽 위 추가 누르기</b><small>홈 화면의 RoVoCar 아이콘으로 실행하세요.</small></div></li>
+      </ol>
+      <button class="primary-btn wide" type="button" data-close-dialog>확인했어요</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
   <script src="supabase-config.js?v=1" defer></script>
   <script src="cloud.js?v=3" defer></script>
-  <script src="app.js?v=7" defer></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>
