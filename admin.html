@@ -1,0 +1,17 @@
+<!doctype html><html lang="ko"><head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#102f3e">
+  <title>RoVoCar 관리자</title><link rel="icon" href="assets/rovocar.svg"><link rel="stylesheet" href="admin.css?v=1">
+</head><body>
+  <header><a href="./" class="admin-brand"><img src="assets/rovocar.svg" alt="" width="54"><span><b>RoVoCar</b><small>읽기 전용 관리자</small></span></a><button id="adminAuthBtn">카카오로 관리자 로그인</button></header>
+  <main>
+    <section class="admin-hero"><p>PRIVACY-SAFE OVERVIEW</p><h1>가족의 학습 현황</h1><span id="adminStatus">Supabase 연결을 확인하고 있어요.</span></section>
+    <section id="adminContent" class="hidden">
+      <div id="summaryCards" class="summary-cards"></div>
+      <div class="panel"><div class="panel-head"><div><p>USERS</p><h2>로그인 사용자</h2></div><input id="adminSearch" type="search" placeholder="표시 이름 검색"></div><div id="userTable" class="user-table"></div></div>
+      <div id="deckPanel" class="panel hidden"><div class="panel-head"><div><p>DECKS</p><h2 id="selectedUserTitle">사용자 단어장</h2></div><button id="closeDeckPanel">닫기</button></div><div id="adminDeckList"></div></div>
+    </section>
+    <section id="adminError" class="error-card hidden"><h2>관리자 화면을 열 수 없어요</h2><p id="adminErrorText"></p><a href="./">RoVoCar로 돌아가기</a></section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script><script src="supabase-config.js?v=1"></script><script src="admin.js?v=1"></script>
+</body></html>
