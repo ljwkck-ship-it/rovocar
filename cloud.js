@@ -1,3 +1,5 @@
+import { dataSnapshot, syncPlan } from './core.mjs';
+
 (function () {
   const DIRTY_KEY = 'rovocar:cloud-dirty:v1';
   const config = window.ROVOCAR_SUPABASE || {};
@@ -8,8 +10,12 @@
   let user = null;
   let syncing = false;
   const dirtyKey = () => user ? `${DIRTY_KEY}:${user.id}` : DIRTY_KEY;
+  const snapshotKey = () => user ? `rovocar:cloud-snapshot:v1:${user.id}` : 'rovocar:cloud-snapshot:v1';
+  const migrationKey = () => user ? `rovocar:cloud-migrated:${user.id}` : 'rovocar:cloud-migrated';
 
   function emit(detail) { window.dispatchEvent(new CustomEvent('rovocar-cloud', { detail })); }
+  function rememberSnapshot(decks, registry) { localStorage.setItem(snapshotKey(), dataSnapshot(decks, registry)); }
+  function remoteChanged(remote) { const previous=localStorage.getItem(snapshotKey()); return Boolean(previous && previous!==dataSnapshot(remote.decks,remote.registry)); }
   function publicUser(value) {
     if (!value) return null;
     return { id: value.id, email: value.email || '', name: value.user_metadata?.name || value.user_metadata?.full_name || 'RoVoCar 사용자' };
@@ -46,25 +52,29 @@
     if (!client || !user || !navigator.onLine) return false;
     const { error } = await client.rpc('replace_user_data', { payload: { decks, registry } });
     if (error) throw error;
+    const persisted=await pull();
+    rememberSnapshot(persisted.decks,persisted.registry);
     localStorage.removeItem(dirtyKey());
-    return true;
+    return persisted;
   }
   async function sync(decks, registry = {}, options = {}) {
     if (!client || !user || syncing) return null;
     if (!navigator.onLine) { localStorage.setItem(dirtyKey(), '1'); emit({ type: 'offline', user: publicUser(user) }); return null; }
     syncing = true; emit({ type: 'syncing', user: publicUser(user) });
     try {
-      const migrationKey = `rovocar:cloud-migrated:${user.id}`;
-      const isFirstLogin = !localStorage.getItem(migrationKey);
+      const isFirstLogin = !localStorage.getItem(migrationKey());
       const isDirty = localStorage.getItem(dirtyKey()) === '1' || options.forcePush;
       const remote = await pull();
       let result = null;
+      const plan=syncPlan({isFirstLogin,localDeckCount:decks.length,remoteDeckCount:remote.decks.length,isDirty,remoteChanged:remoteChanged(remote),forcePush:options.forcePush});
+      if (plan==='migration-choice') return { kind:'migration-choice', remote };
+      if (plan==='conflict') return { kind:'conflict', remote };
       if (isFirstLogin) {
-        if (remote.decks.length) result = remote;
-        else await push(decks,registry);
-        localStorage.setItem(migrationKey, '1');
-      } else if (isDirty) await push(decks,registry);
-      else result = remote;
+        if (plan==='pull') { rememberSnapshot(remote.decks,remote.registry); result = remote; }
+        else result=await push(decks,registry);
+        localStorage.setItem(migrationKey(), '1');
+      } else if (plan==='push') result=await push(decks,registry);
+      else { rememberSnapshot(remote.decks,remote.registry); result = remote; }
       emit({ type: 'synced', user: publicUser(user) });
       return result;
     } catch (error) {
@@ -73,7 +83,12 @@
   }
   async function flush(decks, registry = {}) {
     while (syncing) await new Promise(resolve => setTimeout(resolve, 50));
-    return sync(decks, registry, { forcePush: true });
+    return sync(decks, registry);
+  }
+  async function resolveDataChoice(choice, decks, registry, remote) {
+    if (choice==='remote') { rememberSnapshot(remote.decks,remote.registry); localStorage.setItem(migrationKey(), '1'); localStorage.removeItem(dirtyKey()); return remote; }
+    const result=await sync(decks,registry,{forcePush:true});
+    return result?.kind ? null : result;
   }
   function markDirty() { localStorage.setItem(dirtyKey(), '1'); }
   async function recordVisit() {
@@ -89,5 +104,5 @@
     window.addEventListener('online', () => emit({ type: 'online', user: publicUser(user) }));
     return publicUser(user);
   }
-  window.RoVoCloud = { configured, init, signIn, signOut, sync, flush, markDirty, getUser: () => publicUser(user) };
+  window.RoVoCloud = { configured, init, signIn, signOut, sync, flush, resolveDataChoice, markDirty, getUser: () => publicUser(user) };
 })();

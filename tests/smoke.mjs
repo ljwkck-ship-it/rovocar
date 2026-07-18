@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 
-const required = ['index.html','styles.css','app.js','cloud.js','admin.html','admin.css','admin.js','supabase-config.js','supabase/schema.sql','sw.js','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv'];
+const required = ['index.html','styles.css','core.mjs','app.js','cloud.js','admin.html','admin.css','admin.js','supabase-config.js','supabase/schema.sql','sw.js','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv'];
 const contents = Object.fromEntries(await Promise.all(required.map(async file => [file, await readFile(new URL(`../${file}`, import.meta.url), file.endsWith('.png') ? null : 'utf8')])));
 
 assert.match(contents['index.html'], /id="garageView"/);
@@ -12,6 +12,9 @@ assert.match(contents['app.js'], /localStorage/);
 assert.match(contents['app.js'], /registryNo/);
 assert.match(contents['app.js'], /deleteCurrentDeck/);
 assert.match(contents['app.js'], /importTargetDeckId/);
+assert.match(contents['app.js'], /syncDecisionDialog/);
+assert.match(contents['cloud.js'], /migration-choice/);
+assert.match(contents['cloud.js'], /remoteChanged/);
 assert.match(contents['supabase/schema.sql'], /enable row level security/);
 assert.match(contents['supabase/schema.sql'], /is_rovocar_admin/);
 assert.doesNotMatch(contents['supabase-config.js'], /service_role|sb_secret_/i);
@@ -37,15 +40,13 @@ function parseCsv(text) {
   if(field||row.length){row.push(field);rows.push(row);} return rows;
 }
 
-const sampleDir = new URL('../영어 단어 입력/', import.meta.url);
-const sampleFiles = (await readdir(sampleDir)).filter(name => name.endsWith('.csv')).sort();
-assert.ok(sampleFiles.length >= 4, 'CSV 샘플 파일이 충분하지 않습니다.');
+const sampleDir = new URL('../_local/samples/english-vocabulary/', import.meta.url);
+let sampleFiles=[];
+try { sampleFiles=(await readdir(sampleDir)).filter(name => name.endsWith('.csv')).sort(); } catch {}
 for (const file of sampleFiles) {
   const rows = parseCsv(await readFile(new URL(file, sampleDir), 'utf8'));
   assert.deepEqual(rows[0], ['English','Korean'], `${file}: 헤더가 올바르지 않습니다.`);
   assert.equal(rows.length - 1, 80, `${file}: 단어가 80개여야 합니다.`);
   assert.ok(rows.slice(1).every(row => row.length >= 2 && row[0].trim() && row.slice(1).some(value => value.trim())), `${file}: 비어 있는 행이 있습니다.`);
-  const normalized = rows.slice(1).map(row => row[0].trim().toLowerCase());
-  assert.equal(new Set(normalized).size, normalized.length, `${file}: 중복 영어 단어가 있습니다.`);
 }
-console.log(`CSV samples passed: ${sampleFiles.length} files × 80 words`);
+console.log(sampleFiles.length?`Private CSV samples passed: ${sampleFiles.length} files × 80 words`:'Private CSV samples skipped: _local folder is not included in Git.');

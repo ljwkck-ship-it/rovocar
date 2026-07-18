@@ -179,10 +179,20 @@
     </div>
   </dialog>
 
+  <dialog id="syncDecisionDialog">
+    <div class="dialog-form">
+      <p class="eyebrow">SYNC CHECK</p>
+      <h2 id="syncDecisionTitle">동기화 내용을 선택해 주세요</h2>
+      <p id="syncDecisionCopy" class="dialog-copy"></p>
+      <button id="syncUseRemoteBtn" class="secondary-btn wide" type="button">클라우드 단어장 불러오기</button>
+      <button id="syncKeepLocalBtn" class="primary-btn wide" type="button">이 기기 단어장 저장</button>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
   <script src="supabase-config.js?v=1" defer></script>
-  <script src="cloud.js?v=4" defer></script>
-  <script src="app.js?v=13" defer></script>
+  <script type="module" src="cloud.js?v=5"></script>
+  <script type="module" src="app.js?v=14"></script>
 </body>
 </html>

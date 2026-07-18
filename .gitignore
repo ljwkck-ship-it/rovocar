@@ -5,3 +5,5 @@ node_modules/
 .env.*
 !.env.example
 
+# 개인 단어장, 참고 캡처, 벤치마크 자료와 개인 메모는 로컬에만 둡니다.
+_local/

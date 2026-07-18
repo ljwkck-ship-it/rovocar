@@ -49,7 +49,7 @@ iPhone PWA 캡처와 393px 모바일 뷰포트를 기준으로 다음 화면을 
 
 ### CSV 검증
 
-프로젝트의 `영어 단어 입력/` 폴더에 있던 실제 샘플을 사용해 파서를 점검했습니다.
+로컬 전용 `_local/samples/english-vocabulary/` 폴더의 실제 샘플을 사용해 파서를 점검했습니다. 이 폴더는 Git에 포함하지 않습니다.
 
 - 샘플 CSV 4개
 - 각 파일 80단어
@@ -81,6 +81,15 @@ iPhone PWA 캡처와 393px 모바일 뷰포트를 기준으로 다음 화면을 
 - Supabase 저장 함수에서도 번호 충돌 시 다음 빈 번호를 배정
 - 전체 단어장과 단어를 한 트랜잭션으로 저장해 부분 반영 방지
 - 저장 예약이 남아 있는 상태에서 로그아웃하면 최신 데이터를 먼저 서버에 전송
+- 같은 계정을 다른 기기에서 수정한 사실을 감지하면 자동 덮어쓰기 대신 선택 화면 표시
+- 첫 로그인에서 기기 단어장과 기존 클라우드 단어장이 모두 있으면 자동 삭제 대신 선택 화면 표시
+
+선택 화면에서는 다음 중 하나를 고릅니다.
+
+- **클라우드 단어장 불러오기**: 현재 기기 변경을 버리고 서버에 저장된 단어장을 사용
+- **이 기기 단어장 저장**: 현재 기기 변경으로 서버 단어장을 교체
+
+현재 버전은 삭제까지 완벽하게 병합하는 자동 병합보다, 사용자가 어느 쪽을 보존할지 확인하는 방식을 우선합니다. 같은 계정을 여러 기기에서 동시에 쓰는 경우에는 저장 전 이 선택이 나타날 수 있습니다.
 
 수정 후 카카오 로그아웃과 재로그인을 반복해 `5월19일_001`, `5월19일_002`, `5월19일_003`이 모두 다시 로드되고 동기화 상태가 `동기화됨`으로 돌아오는 것을 확인했습니다. 복구 과정에서 사용자가 만든 다른 단어장은 임의로 삭제하지 않고 그대로 보존했습니다.
 
@@ -149,11 +158,13 @@ on conflict (user_id) do nothing;
 
 GitHub에는 RoVoCar 운영 소스만 추적합니다. 아래 로컬 참고 자료는 커밋에서 제외했습니다.
 
-- `Vocat_앱/`
-- `영어 단어 입력/`
-- `참고 이미지/`
-- `study_pwa/`
-- 개인 프로젝트 가이드 문서
+- `_local/references/vocat/`
+- `_local/references/images/`
+- `_local/references/study_pwa/`
+- `_local/samples/english-vocabulary/`
+- `_local/PWA_PERSONAL_PROJECT_START_GUIDE.md`
+
+`_local/`은 `.gitignore`로 전체 제외합니다. 개인 단어장 CSV, 촬영 사진, VoCat 화면 캡처, 외부 참고 프로젝트와 개인 메모는 GitHub에 올라가지 않습니다.
 
 ## PWA 설치 안내
 
@@ -286,7 +297,9 @@ involve,"수반하다, 포함하다"
 | `supabase/schema.sql` | DB 스키마와 RLS 정책 |
 | `manifest.webmanifest` | PWA 메타데이터 |
 | `sw.js` | 오프라인 캐시 |
-| `tests/smoke.mjs` | 구조·기능·CSV 샘플 스모크 테스트 |
+| `tests/smoke.mjs` | 구조·기능 스모크 테스트와 로컬 CSV 샘플 선택 검사 |
+| `tests/core.mjs` | CSV, 복수 뜻 정답, 동기화 스냅샷 단위 테스트 |
+| `core.mjs` | CSV·정답 후보·동기화 비교에 사용하는 공통 순수 함수 |
 
 ## 로컬 실행
 
@@ -300,6 +313,7 @@ python3 -m http.server 5173
 
 ```bash
 node tests/smoke.mjs
+node tests/core.mjs
 node --check app.js
 node --check cloud.js
 node --check admin.js
@@ -310,7 +324,7 @@ python3 -m json.tool manifest.webmanifest
 
 ```text
 RoVoCar smoke test passed: PWA files, two game modes, CSV import, reference data
-CSV samples passed: 4 files × 80 words
+RoVoCar core tests passed: CSV, alternate meanings, and sync snapshots
 ```
 
 실서비스에서 추가로 확인한 항목:
