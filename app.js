@@ -22,7 +22,12 @@ async function loadData(){
 function loadFromStorage(key){try{const saved=localStorage.getItem(key);if(saved){state.decks=JSON.parse(saved);loadRegistry();return true;}}catch{}return false;}
 function loadRegistry(){try{state.registry=JSON.parse(localStorage.getItem(state.registryKey)||'{}');}catch{state.registry={};}ensureRegistryNumbers();}
 function registryNumber(english){const key=normalizeEnglish(english);if(state.registry[key])return state.registry[key];const next=Math.max(0,...Object.values(state.registry).map(Number))+1;state.registry[key]=next;return next;}
-function ensureRegistryNumbers(){for(const deck of [...state.decks].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)))for(const word of deck.words)word.registryNo=registryNumber(word.english);}
+function ensureRegistryNumbers(){
+  const repaired={},used=new Set();let next=1;
+  for(const [key,value] of Object.entries(state.registry||{}).sort((a,b)=>Number(a[1])-Number(b[1]))){let no=Number(value);if(!Number.isInteger(no)||no<1||used.has(no)){while(used.has(next))next++;no=next;}repaired[key]=no;used.add(no);next=Math.max(next,no+1);}
+  state.registry=repaired;
+  for(const deck of [...state.decks].sort((a,b)=>new Date(a.createdAt)-new Date(b.createdAt)))for(const word of deck.words)word.registryNo=registryNumber(word.english);
+}
 let cloudSyncTimer;
 function save(sync=true){ensureRegistryNumbers();localStorage.setItem(state.storageKey,JSON.stringify(state.decks));localStorage.setItem(state.registryKey,JSON.stringify(state.registry));if(sync&&state.cloudUser&&window.RoVoCloud){RoVoCloud.markDirty();clearTimeout(cloudSyncTimer);cloudSyncTimer=setTimeout(()=>RoVoCloud.sync(state.decks,state.registry).catch(()=>{}),700);}}
 function currentDeck(){return state.decks.find(d=>d.id===state.currentDeckId);}

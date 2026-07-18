@@ -109,8 +109,21 @@ begin
     select key as english_normalized, value::text::integer as registry_no
     from jsonb_each(payload->'registry')
   loop
+    -- 이미 다른 단어가 같은 순번을 사용한다면 기존 번호를 보존하고 다음 빈 번호를 배정합니다.
+    if not exists (
+      select 1 from public.vocabulary_registry
+      where user_id=owner_id and english_normalized=registry_item.english_normalized
+    ) and exists (
+      select 1 from public.vocabulary_registry
+      where user_id=owner_id and registry_no=registry_item.registry_no
+    ) then
+      select coalesce(max(registry_no),0)+1 into assigned_registry_no
+      from public.vocabulary_registry where user_id=owner_id;
+    else
+      assigned_registry_no := registry_item.registry_no;
+    end if;
     insert into public.vocabulary_registry(user_id,english_normalized,registry_no)
-    values(owner_id,registry_item.english_normalized,registry_item.registry_no)
+    values(owner_id,registry_item.english_normalized,assigned_registry_no)
     on conflict (user_id,english_normalized) do nothing;
   end loop;
 
