@@ -71,6 +71,10 @@
       localStorage.setItem(dirtyKey(), '1'); emit({ type: 'error', error: error.message, user: publicUser(user) }); throw error;
     } finally { syncing = false; }
   }
+  async function flush(decks, registry = {}) {
+    while (syncing) await new Promise(resolve => setTimeout(resolve, 50));
+    return sync(decks, registry, { forcePush: true });
+  }
   function markDirty() { localStorage.setItem(dirtyKey(), '1'); }
   async function recordVisit() {
     if (!client || !user || sessionStorage.getItem(`rovocar:visit:${user.id}`)) return;
@@ -85,5 +89,5 @@
     window.addEventListener('online', () => emit({ type: 'online', user: publicUser(user) }));
     return publicUser(user);
   }
-  window.RoVoCloud = { configured, init, signIn, signOut, sync, markDirty, getUser: () => publicUser(user) };
+  window.RoVoCloud = { configured, init, signIn, signOut, sync, flush, markDirty, getUser: () => publicUser(user) };
 })();
