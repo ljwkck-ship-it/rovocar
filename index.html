@@ -25,9 +25,10 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/rovocar.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
+  <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
   <div class="road-lines" aria-hidden="true"></div>
   <div class="app-shell">
     <header class="app-header">
@@ -42,13 +43,14 @@
       </div>
     </header>
 
-    <main>
+    <main id="mainContent" tabindex="-1">
       <section id="garageView" class="view" aria-labelledby="garageTitle">
         <div class="garage-hero">
           <div>
             <p class="eyebrow">MY WORD GARAGE</p>
-            <h1 id="garageTitle">오늘 외울 단어,<br><em>어느 차에 실을까요?</em></h1>
+            <h1 id="garageTitle" tabindex="-1">오늘 외울 단어,<br><em>어느 차에 실을까요?</em></h1>
             <p class="hero-copy">단어장을 만들고 두 가지 주행 모드로 반복해서 맞혀 보세요.</p>
+            <a class="csv-maker-link" href="csv-maker/">손글씨 단어장이 있나요? 사진으로 CSV 만들기 <span aria-hidden="true">↗</span></a>
           </div>
           <div class="hero-sign" aria-hidden="true"><span>READY</span><b>출발 준비</b></div>
         </div>
@@ -61,7 +63,7 @@
           </div>
         </div>
         <div class="garage-tools">
-          <label class="search-box"><span aria-hidden="true">⌕</span><input id="deckSearch" type="search" placeholder="단어장 이름 검색" autocomplete="off"></label>
+          <label class="search-box" for="deckSearch"><span class="sr-only">단어장 이름 검색</span><span aria-hidden="true">⌕</span><input id="deckSearch" name="deck-search" type="search" aria-label="단어장 이름 검색" placeholder="단어장 이름 검색" autocomplete="off"></label>
           <span id="deckResultCount" class="result-count"></span>
         </div>
         <div id="deckGrid" class="deck-grid"></div>
@@ -72,7 +74,7 @@
         <div class="deck-dashboard">
           <div>
             <p class="eyebrow">SELECTED CAR</p>
-            <h1 id="deckTitle"></h1>
+            <h1 id="deckTitle" tabindex="-1"></h1>
             <p id="deckSummary" class="hero-copy"></p>
             <div class="deck-actions"><button id="renameDeckBtn" class="text-action" type="button">이름 바꾸기</button><span aria-hidden="true">·</span><button id="deleteDeckBtn" class="delete-action" type="button">단어장 삭제</button></div>
           </div>
@@ -100,10 +102,10 @@
       <section id="gameView" class="view hidden" aria-labelledby="gameTitle">
         <div class="game-topbar">
           <button id="quitGameBtn" class="back-btn" type="button">← 그만하기</button>
-          <div class="game-label"><span id="gameModeLabel"></span><b id="gameTitle"></b></div>
+          <div class="game-label"><span id="gameModeLabel"></span><b id="gameTitle" tabindex="-1"></b></div>
           <span id="gameCounter" class="counter"></span>
         </div>
-        <div class="route" aria-label="퀴즈 진행률"><div id="routeFill"></div><img id="routeCar" src="assets/rovocar.svg" alt=""></div>
+        <div id="route" class="route" role="progressbar" aria-label="퀴즈 진행률" aria-valuemin="1" aria-valuemax="1" aria-valuenow="1" aria-valuetext="전체 1개 중 1번째 단어"><div id="routeFill"></div><img id="routeCar" src="assets/rovocar.svg" alt=""></div>
 
         <article id="quizCard" class="quiz-card">
           <p id="promptLabel" class="eyebrow"></p>
@@ -127,7 +129,7 @@
         <div class="result-card">
           <img src="assets/rovocar.svg" alt="기뻐하는 RoVoCar" width="170">
           <p class="eyebrow">COURSE COMPLETE</p>
-          <h1 id="resultTitle">주행 완료!</h1>
+          <h1 id="resultTitle" tabindex="-1">주행 완료!</h1>
           <p id="resultMessage"></p>
           <div class="result-stats"><div><b id="resultScore"></b><span>정답</span></div><div><b id="resultRate"></b><span>정답률</span></div></div>
           <div class="result-actions"><button id="retryWrongBtn" class="primary-btn" type="button">틀린 단어 다시</button><button class="secondary-btn" type="button" data-go="deck">단어장으로</button></div>
@@ -136,17 +138,17 @@
     </main>
   </div>
 
-  <dialog id="deckDialog">
+  <dialog id="deckDialog" aria-labelledby="deckDialogTitle">
     <form id="deckForm" method="dialog" class="dialog-form">
       <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
-      <p class="eyebrow">NEW CAR</p><h2>새 단어장 만들기</h2>
+      <p class="eyebrow">NEW CAR</p><h2 id="deckDialogTitle">새 단어장 만들기</h2>
       <p class="dialog-copy">이름을 정한 뒤 단어를 연속해서 입력할 수 있어요.</p>
       <label>단어장 이름<input id="deckNameInput" maxlength="30" required placeholder="예: 7월 3주 영어"></label>
       <button class="primary-btn wide" value="default">만들고 단어 입력하기</button>
     </form>
   </dialog>
 
-  <dialog id="wordDialog">
+  <dialog id="wordDialog" aria-labelledby="wordDialogTitle">
     <form id="wordForm" method="dialog" class="dialog-form">
       <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
       <p class="eyebrow">LOAD A WORD</p><h2 id="wordDialogTitle">단어 싣기</h2>
@@ -158,7 +160,7 @@
     </form>
   </dialog>
 
-  <dialog id="importDialog">
+  <dialog id="importDialog" aria-labelledby="importDialogTitle">
     <form id="importForm" method="dialog" class="dialog-form">
       <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
       <p class="eyebrow">IMPORT CARGO</p><h2 id="importDialogTitle">CSV 단어장 확인</h2>
@@ -169,19 +171,19 @@
     </form>
   </dialog>
 
-  <dialog id="renameDialog">
+  <dialog id="renameDialog" aria-labelledby="renameDialogTitle">
     <form id="renameForm" class="dialog-form">
       <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
-      <p class="eyebrow">RENAME CAR</p><h2>단어장 이름 바꾸기</h2>
+      <p class="eyebrow">RENAME CAR</p><h2 id="renameDialogTitle">단어장 이름 바꾸기</h2>
       <label>새 이름<input id="renameDeckInput" maxlength="30" required></label>
       <button class="primary-btn wide" type="submit">이름 저장</button>
     </form>
   </dialog>
 
-  <dialog id="installDialog">
+  <dialog id="installDialog" aria-labelledby="installDialogTitle">
     <div class="dialog-form install-guide">
       <button class="dialog-close" type="button" data-close-dialog aria-label="닫기">×</button>
-      <p class="eyebrow">INSTALL ON IPHONE</p><h2>홈 화면에 RoVoCar 추가</h2>
+      <p class="eyebrow">INSTALL ON IPHONE</p><h2 id="installDialogTitle">홈 화면에 RoVoCar 추가</h2>
       <p class="dialog-copy">iPhone과 iPad의 Safari에서는 아래 순서로 설치해 주세요.</p>
       <ol class="install-steps">
         <li><span class="install-step-icon" aria-hidden="true">↥</span><div><b>Safari의 공유 버튼 누르기</b><small>화면 아래의 사각형과 위쪽 화살표 아이콘입니다.</small></div></li>
@@ -192,7 +194,7 @@
     </div>
   </dialog>
 
-  <dialog id="syncDecisionDialog">
+  <dialog id="syncDecisionDialog" aria-labelledby="syncDecisionTitle">
     <div class="dialog-form">
       <p class="eyebrow">SYNC CHECK</p>
       <h2 id="syncDecisionTitle">동기화 내용을 선택해 주세요</h2>

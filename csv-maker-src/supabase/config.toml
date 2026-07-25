@@ -1,0 +1,3 @@
+[functions.extract-vocabulary]
+verify_jwt = true
+

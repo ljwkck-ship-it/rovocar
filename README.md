@@ -5,6 +5,7 @@ RoVoCar는 종이 영어 단어장을 CSV로 변환해 등록하고, 반복 퀴�
 ## 서비스 주소
 
 - 사용자 앱: <https://ljwkck-ship-it.github.io/rovocar/>
+- CSV Maker: <https://ljwkck-ship-it.github.io/rovocar/csv-maker/>
 - 읽기 전용 관리자: <https://ljwkck-ship-it.github.io/rovocar/admin.html>
 - GitHub 저장소: <https://github.com/ljwkck-ship-it/rovocar>
 - Supabase 프로젝트 Ref: `txmepzwyduasgunultwa`
@@ -47,6 +48,28 @@ iPhone PWA 캡처와 393px 모바일 뷰포트를 기준으로 다음 화면을 
 
 실제 운영 데이터뿐 아니라 긴 테스트용 단어장 이름, `extraordinarilylongspelling` 같은 긴 철자와 여러 줄 뜻을 넣어 첫 화면과 단어 목록을 각각 렌더링했습니다.
 
+### 접근성·UX 점검 및 반영
+
+2026-07-18에 웹 접근성과 학습 흐름을 점검하고, 배포 전 우선 수정 항목을 반영했습니다.
+
+- 검색창, CSV 불러오기, 관리자 화면의 입력·버튼·링크에 키보드 포커스 표시 추가
+- 사용자 앱과 관리자 검색창에 화면 낭독기가 읽을 수 있는 검색 레이블 추가
+- 페이지 첫머리에 **본문으로 건너뛰기** 링크 추가
+- 차고·단어장·퀴즈·결과 화면 전환 뒤 해당 화면의 제목으로 포커스 이동
+- 퀴즈 진행 바를 `progressbar`로 표시하고, 전체 단어 수와 현재 순서를 접근 가능한 텍스트로 갱신
+- 단어장 생성, 단어 입력, CSV 불러오기, 이름 변경, 앱 설치, 동기화 선택 다이얼로그를 제목과 연결해 접근 가능한 이름 제공
+
+다음 방식으로 반영 내용을 검증했습니다.
+
+```bash
+node --test tests/core.mjs
+node tests/smoke.mjs
+```
+
+- CSV 파싱·뜻 비교·동기화 스냅샷 핵심 테스트 통과
+- PWA 구성, 두 가지 퀴즈 모드, CSV 불러오기, 참조 데이터와 접근성 마크업 스모크 테스트 통과
+- 로컬 브라우저에서 검색창이 `단어장 이름 검색`이라는 접근 가능한 이름으로 노출되는 것과, 새 단어장 다이얼로그가 `새 단어장 만들기`라는 제목으로 노출되는 것을 확인
+
 ### CSV 검증
 
 로컬 전용 `_local/samples/english-vocabulary/` 폴더의 실제 샘플을 사용해 파서를 점검했습니다. 이 폴더는 Git에 포함하지 않습니다.
@@ -83,6 +106,10 @@ iPhone PWA 캡처와 393px 모바일 뷰포트를 기준으로 다음 화면을 
 - 저장 예약이 남아 있는 상태에서 로그아웃하면 최신 데이터를 먼저 서버에 전송
 - 같은 계정을 다른 기기에서 수정한 사실을 감지하면 자동 덮어쓰기 대신 선택 화면 표시
 - 첫 로그인에서 기기 단어장과 기존 클라우드 단어장이 모두 있으면 자동 삭제 대신 선택 화면 표시
+- iPhone PWA 재설치 직후에도 인증 이벤트가 중복으로 화면을 초기화하지 않도록 같은 사용자 세션은 한 번만 처리
+- 초기 동기화 중 단어장을 생성·삭제하면 최신 로컬 상태를 우선 저장하고, 서버 응답이 차고 목록을 되돌리지 않도록 처리
+- 저장 중인 동기화가 있으면 완료까지 기다린 뒤 가장 최신 단어장 상태를 순서대로 저장
+- 서비스워커 캐시를 `rovocar-v17`로 갱신해 설치형 PWA와 Safari 웹에서 같은 수정본을 받도록 처리
 
 선택 화면에서는 다음 중 하나를 고릅니다.
 
@@ -105,10 +132,6 @@ Supabase 프로젝트는 Tokyo AWS 리전을 사용합니다. Auth 리디렉션 
 - 앱 표시 이름: `RoVoCar`
 - 회사·사업자 정보: 기존 승인 정보 유지
 - 카테고리: 교육
-- iPhone PWA 재설치 직후에도 인증 이벤트가 중복으로 화면을 초기화하지 않도록 같은 사용자 세션은 한 번만 처리
-- 초기 동기화 중 단어장을 생성·삭제하면 최신 로컬 상태를 우선 저장하고, 서버 응답이 차고 목록을 되돌리지 않도록 처리
-- 저장 중인 동기화가 있으면 완료까지 기다린 뒤 가장 최신 단어장 상태를 순서대로 저장
-- 서비스워커 캐시를 `rovocar-v17`로 갱신해 설치형 PWA와 Safari 웹에서 같은 수정본을 받도록 처리
 - 대표 도메인: GitHub Pages 운영 주소
 - 카카오 로그인: 활성화
 - OpenID Connect: 활성화
@@ -301,6 +324,8 @@ involve,"수반하다, 포함하다"
 | `supabase/schema.sql` | DB 스키마와 RLS 정책 |
 | `manifest.webmanifest` | PWA 메타데이터 |
 | `sw.js` | 오프라인 캐시 |
+| `csv-maker/` | RoVoCar 하위 경로로 배포하는 CSV Maker 정적 빌드 |
+| `csv-maker-src/` | CSV Maker Vite 소스, 테스트, Supabase Edge Function |
 | `tests/smoke.mjs` | 구조·기능 스모크 테스트와 로컬 CSV 샘플 선택 검사 |
 | `tests/core.mjs` | CSV, 복수 뜻 정답, 동기화 스냅샷 단위 테스트 |
 | `core.mjs` | CSV·정답 후보·동기화 비교에 사용하는 공통 순수 함수 |
@@ -312,6 +337,14 @@ python3 -m http.server 5173
 ```
 
 브라우저에서 <http://localhost:5173/>을 엽니다. 운영 테스트는 쿼리 문자열이 없는 주소를 기준으로 합니다. 과거 테스트 주소인 `?v=7`은 필수가 아닙니다.
+
+CSV Maker를 수정할 때는 `csv-maker-src/`에서 작업하고 빌드 결과를 `csv-maker/`에 생성합니다.
+
+```bash
+cd csv-maker-src
+npm test
+npm run build
+```
 
 ## 테스트
 
@@ -345,6 +378,8 @@ RoVoCar core tests passed: CSV, alternate meanings, and sync snapshots
 - 중복 단어의 등록 순서를 두 퀴즈 모드에서만 표시
 - 로그아웃 직전 강제 동기화 후 재로그인 데이터 유지
 - 목표 단어장 3개가 재로그인 후 모두 복원되는 것 확인
+- iPhone 설치형 PWA에서 단어장 삭제 뒤 차고 목록이 즉시 감소하고 유지되는 흐름 확인
+- Safari 웹과 설치형 PWA가 같은 동기화 로직을 사용하도록 확인
 
 ## 운영 및 보안 주의사항
 
@@ -364,5 +399,3 @@ RoVoCar core tests passed: CSV, alternate meanings, and sync snapshots
 - 카카오 User Unlinked 웹훅 구성
 - 개인정보 처리방침 페이지 추가
 - 관리자 화면의 기간별 접속 추이와 CSV 내보내기(개인정보 최소화 유지)
-- iPhone 설치형 PWA에서 단어장 삭제 뒤 차고 목록이 즉시 감소하고 유지되는 흐름 확인
-- Safari 웹과 설치형 PWA가 같은 동기화 로직을 사용하도록 확인

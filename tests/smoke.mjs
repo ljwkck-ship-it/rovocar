@@ -1,18 +1,36 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 
-const required = ['index.html','styles.css','core.mjs','app.js','cloud.js','admin.html','admin.css','admin.js','supabase-config.js','supabase/schema.sql','sw.js','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv'];
+const required = ['index.html','styles.css','core.mjs','app.js','cloud.js','admin.html','admin.css','admin.js','supabase-config.js','supabase/schema.sql','sw.js','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv','csv-maker-src/package.json','csv-maker-src/vite.config.js','csv-maker-src/src/main.js','csv-maker-src/supabase/functions/extract-vocabulary/index.ts'];
 const contents = Object.fromEntries(await Promise.all(required.map(async file => [file, await readFile(new URL(`../${file}`, import.meta.url), file.endsWith('.png') ? null : 'utf8')])));
 
 assert.match(contents['index.html'], /id="garageView"/);
+assert.match(contents['index.html'], /class="skip-link" href="#mainContent"/);
+assert.match(contents['index.html'], /<main id="mainContent" tabindex="-1">/);
+assert.match(contents['index.html'], /id="deckSearch" name="deck-search" type="search" aria-label="단어장 이름 검색"/);
+assert.match(contents['index.html'], /id="route" class="route" role="progressbar"/);
+assert.match(contents['index.html'], /<dialog id="deckDialog" aria-labelledby="deckDialogTitle">/);
+assert.match(contents['index.html'], /<dialog id="syncDecisionDialog" aria-labelledby="syncDecisionTitle">/);
 assert.match(contents['index.html'], /data-mode="en-ko"/);
 assert.match(contents['index.html'], /data-mode="ko-en"/);
 assert.match(contents['index.html'], /id="csvInput"/);
+assert.match(contents['index.html'], /href="csv-maker\/"/);
+assert.match(contents['styles.css'], /\.csv-maker-link/);
+assert.match(contents['csv-maker-src/vite.config.js'], /base: '\.\/'/);
+assert.match(contents['csv-maker-src/vite.config.js'], /outDir: '\.\.\/csv-maker'/);
+assert.match(contents['csv-maker-src/src/main.js'], /extract-vocabulary/);
+assert.match(contents['csv-maker-src/supabase/functions/extract-vocabulary/index.ts'], /requestGemini/);
 assert.match(contents['app.js'], /localStorage/);
 assert.match(contents['app.js'], /registryNo/);
 assert.match(contents['app.js'], /deleteCurrentDeck/);
 assert.match(contents['app.js'], /importTargetDeckId/);
 assert.match(contents['app.js'], /syncDecisionDialog/);
+assert.match(contents['app.js'], /focusViewHeading/);
+assert.match(contents['app.js'], /aria-valuetext/);
+assert.match(contents['styles.css'], /\.search-box:focus-within/);
+assert.match(contents['styles.css'], /\.import-btn:focus-within/);
+assert.match(contents['admin.html'], /<label class="sr-only" for="adminSearch">표시 이름 검색<\/label>/);
+assert.match(contents['admin.css'], /button:focus-visible,input:focus-visible,a:focus-visible/);
 assert.match(contents['cloud.js'], /migration-choice/);
 assert.match(contents['cloud.js'], /remoteChanged/);
 assert.match(contents['supabase/schema.sql'], /enable row level security/);
