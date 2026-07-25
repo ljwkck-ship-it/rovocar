@@ -30,8 +30,8 @@ RoVoCar는 종이 영어 단어장을 사진으로 읽어 단어장에 등록하
 - `영어와 뜻을 나누고 있어요.` 추출 대기 화면에는 진행바를 추가했습니다.
 - 단어장 이름 입력의 기본 플레이스홀더와 미입력 시 제목은 `YYYY-MM-DD 영단어` 형식입니다.
 - 첫 화면 타이틀에 생기던 파란색 포커스 박스는 `[tabindex="-1"]` 포커스 스타일을 분리해 제거했습니다.
-- 운영 PWA 캐시는 `rovocar-v22`, 사용자 앱 번들은 `app.js?v=20` 기준입니다.
-- GitHub Pages 배포는 커밋 `f96d490` 기준 완료를 확인했습니다.
+- 운영 PWA 캐시는 `rovocar-v23`, 사용자 앱 번들은 `app.js?v=21` 기준입니다.
+- GitHub Pages 배포는 커밋 `c5bd583` 기준 완료를 확인했습니다.
 
 관련 커밋:
 
@@ -43,7 +43,16 @@ e81b8a6 Connect CSV maker to RoVoCar import flow
 736559b Refund OCR quota on failed extraction
 6c7809d Apply CSV maker transfer after auth storage setup
 f96d490 Improve CSV maker progress and import sync
+c5bd583 Improve PWA cache update handling
 ```
+
+### PWA 캐시 갱신 안정화
+
+- 기존 서비스 워커가 모든 GET 요청을 cache-first로 처리해 `csv-maker/index.html` 같은 HTML이 오래 남는 문제가 있었습니다.
+- `sw.js`는 HTML, document, navigation 요청을 network-first로 처리하고 JS/CSS/assets는 cache-first로 유지합니다.
+- 서비스 워커 캐시를 `rovocar-v23`으로 올리고 `index.html`의 앱 번들을 `app.js?v=21`로 갱신했습니다.
+- RoVoCar 본앱과 CSV Maker 모두 서비스 워커 업데이트를 확인하고, 새 서비스 워커가 적용되면 기존 PWA 화면을 한 번 자동 새로고침합니다.
+- 이 변경 이후부터는 새 배포가 강력 캐시 삭제 없이 더 안정적으로 반영됩니다. 단, 이미 오래된 서비스 워커로 떠 있는 첫 1회는 일반 새로고침이 필요할 수 있습니다.
 
 ### CSV Maker 추출 안정화
 
