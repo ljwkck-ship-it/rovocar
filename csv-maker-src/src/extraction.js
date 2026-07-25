@@ -34,3 +34,19 @@ export function validateExtraction(value) {
   const warnings = value.warnings.map(text).filter((warning) => warning !== null).slice(0, 20);
   return { items, warnings };
 }
+
+export function parseGeminiJson(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  try {
+    return JSON.parse(trimmed);
+  } catch {}
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    return JSON.parse(trimmed.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}

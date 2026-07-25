@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { base64ByteLength, isSupportedImagePayload, validateExtraction } from './extraction.js';
+import { base64ByteLength, isSupportedImagePayload, parseGeminiJson, validateExtraction } from './extraction.js';
 
 const valid = { items: [{ english: ' take care of ', korean: ' 돌보다 ', confidence: 'high', note: null }], warnings: ['사진 하단을 확인하세요.'] };
 
@@ -26,4 +26,10 @@ test('image payload validation accepts only bounded supported base64 images', ()
   assert.equal(isSupportedImagePayload({ mimeType: 'image/heic', data: 'YWJjZA==' }, 4), false);
   assert.equal(isSupportedImagePayload({ mimeType: 'image/png', data: 'data:image/png;base64,YWJj' }, 100), false);
   assert.equal(isSupportedImagePayload({ mimeType: 'image/png', data: 'YWJjZA==' }, 2), false);
+});
+
+test('Gemini JSON parser tolerates fenced or prefixed JSON', () => {
+  assert.deepEqual(parseGeminiJson('```json\n{"items":[],"warnings":[]}\n```'), { items: [], warnings: [] });
+  assert.deepEqual(parseGeminiJson('result: {"items":[],"warnings":[]}'), { items: [], warnings: [] });
+  assert.equal(parseGeminiJson('not json'), null);
 });

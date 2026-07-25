@@ -78,9 +78,27 @@ async function requestGemini(mimeType: string, data: string) {
   try {
     return await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
       method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 16384, temperature: 0 } }),
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema,
+          maxOutputTokens: 16384,
+          temperature: 0,
+        },
+      }),
     });
   } finally { clearTimeout(timeout); }
+}
+
+function parseGeminiJson(text: unknown) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  try { return JSON.parse(trimmed); } catch {}
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(trimmed.slice(start, end + 1)); } catch { return null; }
 }
 
 Deno.serve(async (request) => {
@@ -124,7 +142,8 @@ Deno.serve(async (request) => {
     }
     const geminiPayload = await geminiResponse.json();
     const text = geminiPayload?.candidates?.[0]?.content?.parts?.find((part: { text?: unknown }) => typeof part.text === 'string')?.text;
-    let parsed: unknown; try { parsed = JSON.parse(text); } catch { return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' }); }
+    const parsed = parseGeminiJson(text);
+    if (!parsed) return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
     const result = validateExtraction(parsed);
     if (!result) return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
     return reply(origin, 200, result);
