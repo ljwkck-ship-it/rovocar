@@ -96,7 +96,20 @@ if(isIosDevice&&!isStandalone){document.body.classList.add('ios-browser');els.in
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();state.deferredInstall=e;els.installBtn.classList.remove('hidden');});
 els.installBtn.addEventListener('click',async()=>{if(state.deferredInstall){state.deferredInstall.prompt();await state.deferredInstall.userChoice;state.deferredInstall=null;els.installBtn.classList.add('hidden');return;}if(isIosDevice&&!isStandalone){els.installDialog.showModal();return;}toast('브라우저 메뉴에서 앱 설치 또는 홈 화면에 추가를 선택해 주세요.');});
 window.addEventListener('appinstalled',()=>{state.deferredInstall=null;els.installBtn.classList.add('hidden');});
-if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js'));
+if('serviceWorker'in navigator)window.addEventListener('load',async()=>{
+  const hadController=Boolean(navigator.serviceWorker.controller);
+  let refreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!hadController||refreshing)return;
+    refreshing=true;
+    location.reload();
+  });
+  try{
+    const registration=await navigator.serviceWorker.register('sw.js');
+    await registration.update();
+    if(registration.waiting)registration.waiting.postMessage({type:'SKIP_WAITING'});
+  }catch{}
+});
 function renderAccount(){const user=state.cloudUser;els.authBtn.innerHTML=user?`<span>●</span> ${escapeHtml(user.name)} · 로그아웃`:'<span>●</span> 카카오 로그인';els.syncBadge.textContent=user?'동기화됨':'기기 저장';els.syncBadge.className=`sync-badge ${user?'synced':''}`;}
 function applyCloudData(remote){if(!remote?.decks)return;state.decks=remote.decks;state.registry=remote.registry;ensureRegistryNumbers();save(false);if(state.view==='garage')renderGarage();if(state.view==='deck')renderDeck();}
 function openSyncDecision(result){state.pendingSyncDecision=result;const migration=result.kind==='migration-choice';els.syncDecisionTitle.textContent=migration?'기기 단어장과 클라우드 단어장이 모두 있어요':'다른 기기에서 단어장이 바뀌었어요';els.syncDecisionCopy.textContent=migration?`이 기기 ${state.decks.length}개, 클라우드 ${result.remote.decks.length}개 단어장이 있습니다. 어느 내용을 사용할지 선택해 주세요.`:`클라우드에 ${result.remote.decks.length}개 단어장이 있습니다. 선택하지 않으면 현재 기기 내용은 서버에 덮어쓰지 않습니다.`;els.syncUseRemoteBtn.textContent='클라우드 단어장 불러오기';els.syncKeepLocalBtn.textContent='이 기기 단어장 저장';els.syncDecisionDialog.showModal();els.syncBadge.textContent='동기화 선택 필요';els.syncBadge.className='sync-badge error';}
