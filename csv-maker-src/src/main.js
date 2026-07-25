@@ -1,6 +1,6 @@
 import './style.css';
 import { createClient } from '@supabase/supabase-js';
-import { cleanRows, createCsv, safeFilename } from './csv.js';
+import { cleanRows, createCsv, parseVocabularyCsv, safeFilename } from './csv.js';
 
 const app = document.querySelector('#app');
 const indicator = document.querySelector('#stepIndicator');
@@ -11,12 +11,17 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const csvMakerUrl = new URL('.', window.location.href).href;
 const rovocarHomeUrl = new URL('../', csvMakerUrl).href;
 let session = null;
+let sampleRows = [
+  { english: 'take care of', korean: '돌보다' },
+  { english: 'involve', korean: '수반하다, 포함하다' },
+];
 
 const demoRows = [
   { english: 'take care of', korean: '돌보다', confidence: 'high', note: '' },
   { english: 'right, correct', korean: '옳은', confidence: 'low', note: '쉼표 앞뒤의 단어를 확인하세요.' },
   { english: 'involve', korean: '수반하다, 포함하다', confidence: 'high', note: '' },
 ];
+const referenceFiles = ['2026-07-13.csv', '5월19일_001.csv', '5월19일_002.csv', '5월19일_003.csv'];
 
 function setStep(label) { indicator.textContent = label; }
 function escapeHtml(text) {
@@ -25,6 +30,31 @@ function escapeHtml(text) {
 function status(message, kind = '') { return `<p class="status ${kind}" role="status" aria-live="polite">${message}</p>`; }
 function revokePreview() { if (state.objectUrl) URL.revokeObjectURL(state.objectUrl); state.objectUrl = null; }
 async function updateSession() { if (supabase) ({ data: { session } } = await supabase.auth.getSession()); }
+function sampleMarkup() {
+  return sampleRows.slice(0, 2).map((row, index) => `
+        <div class="sample-row"><span>${String(index + 1).padStart(2, '0')}</span><b>${escapeHtml(row.english)}</b><i>${escapeHtml(row.korean)}</i></div>`).join('');
+}
+function pickRandom(items, count) {
+  const pool = [...items];
+  for (let i = pool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, count);
+}
+async function loadSampleRows() {
+  const loaded = await Promise.all(referenceFiles.map(async (file) => {
+    try {
+      const response = await fetch(`${import.meta.env.BASE_URL}reference/${encodeURIComponent(file)}`);
+      if (!response.ok) return [];
+      return parseVocabularyCsv(await response.text());
+    } catch {
+      return [];
+    }
+  }));
+  const rows = loaded.flat();
+  if (rows.length >= 2) sampleRows = pickRandom(rows, 2);
+}
 async function login() {
   if (!supabase) return;
   const { error } = await supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: csvMakerUrl } });
@@ -39,8 +69,7 @@ function renderStart() {
       <h1>손글씨 단어장을<br><em>바로 넣을 수 있게.</em></h1>
       <p class="lede">사진에서 영어와 뜻을 읽고, 틀린 곳만 고쳐 CSV로 내려받으세요.</p>
       <div class="paper-sample" aria-hidden="true">
-        <div class="sample-row" style="display:flex;align-items:baseline;gap:22px;margin-bottom:15px"><span>01</span><b>take care of</b><i>돌보다</i></div>
-        <div class="sample-row" style="display:flex;align-items:baseline;gap:22px;margin-bottom:15px"><span>02</span><b>involve</b><i>수반하다, 포함하다</i></div>
+${sampleMarkup()}
         <div class="red-pencil">검토 후 완성!</div>
       </div>
       ${supabase && !session ? '<button class="upload-cta" id="loginButton"><span>카카오 로그인하고 시작</span><small>가족용 사용량을 안전하게 보호합니다</small></button>' : '<label class="upload-cta" for="photoInput"><span>사진 찍기 또는 선택</span><small>JPEG · PNG · WebP / 한 장씩</small></label>'}
@@ -158,5 +187,6 @@ function renderError(title, detail, back = renderStart) {
 }
 window.addEventListener('beforeunload', revokePreview);
 await updateSession();
+await loadSampleRows();
 if (supabase) supabase.auth.onAuthStateChange((_event, nextSession) => { session = nextSession; renderStart(); });
 renderStart();

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { cleanRows, createCsv, safeFilename } from './csv.js';
+import { cleanRows, createCsv, parseVocabularyCsv, safeFilename } from './csv.js';
 
 const rovocarCore = new URL('../../RoVoCa_PWA/core.mjs', import.meta.url);
 
@@ -24,6 +24,13 @@ test('empty rows are removed before download', () => {
 
 test('filename stays safe while retaining Korean titles', () => {
   assert.equal(safeFilename('  7월 / 단어장? ', new Date('2026-07-19T12:00:00Z')), 'rovocar-7월-단어장-2026-07-19.csv');
+});
+
+test('reference vocabulary CSV parses English and Korean columns', () => {
+  assert.deepEqual(parseVocabularyCsv('English,Korean\r\nability,능력\r\ngrowth,"성장, 증가"\r\n'), [
+    { english: 'ability', korean: '능력' },
+    { english: 'growth', korean: '성장, 증가' },
+  ]);
 });
 
 test('generated CSV round-trips through the current RoVoCar parser', { skip: !existsSync(rovocarCore) }, async () => {
