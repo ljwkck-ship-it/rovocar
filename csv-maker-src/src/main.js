@@ -32,6 +32,7 @@ function escapeHtml(text) {
 function status(message, kind = '') { return `<p class="status ${kind}" role="status" aria-live="polite">${message}</p>`; }
 function revokePreview() { if (state.objectUrl) URL.revokeObjectURL(state.objectUrl); state.objectUrl = null; }
 async function updateSession() { if (supabase) ({ data: { session } } = await supabase.auth.getSession()); }
+function defaultDeckTitle(date = new Date()) { return `${date.toISOString().slice(0, 10)} 영단어`; }
 function sampleMarkup() {
   return sampleRows.slice(0, 2).map((row, index) => `
         <div class="sample-row"><span>${String(index + 1).padStart(2, '0')}</span><b>${escapeHtml(row.english)}</b><i>${escapeHtml(row.korean)}</i></div>`).join('');
@@ -128,7 +129,7 @@ async function extractFromServer() {
 }
 async function renderExtracting() {
   setStep('추출 중');
-  app.innerHTML = `<section class="center-state"><div class="scan-mark" aria-hidden="true"></div><p class="eyebrow">사진을 읽는 중</p><h1>영어와 뜻을<br>나누고 있어요.</h1>${status('같은 사진을 다시 보내지 않도록 잠시만 기다려 주세요.')}</section>`;
+  app.innerHTML = `<section class="center-state"><div class="scan-mark" aria-hidden="true"></div><p class="eyebrow">사진을 읽는 중</p><h1>영어와 뜻을<br>나누고 있어요.</h1><div class="extract-progress" role="progressbar" aria-label="단어 추출 진행 중" aria-valuemin="0" aria-valuemax="100"><span></span></div>${status('같은 사진을 다시 보내지 않도록 잠시만 기다려 주세요.')}</section>`;
   try {
     if (supabase) {
       if (!session) { renderError('다시 로그인해 주세요', '사진을 읽으려면 로그인 상태가 필요합니다.', renderStart); return; }
@@ -160,7 +161,7 @@ function renderReview() {
       ${state.rows.map((row, index) => { const warnings = rowWarnings(row, index); return `<tr class="${warnings.length ? 'needs-check' : ''}"><td class="row-number">${index + 1}</td><td><label class="sr-only" for="english-${index}">${index + 1}번 영어 스펠링</label><input id="english-${index}" data-index="${index}" data-key="english" value="${escapeHtml(row.english)}" placeholder="영어 단어" autocomplete="off" autocapitalize="none" spellcheck="false"></td><td><label class="sr-only" for="korean-${index}">${index + 1}번 한글 뜻</label><input id="korean-${index}" data-index="${index}" data-key="korean" value="${escapeHtml(row.korean)}" placeholder="한글 뜻" autocomplete="off" autocorrect="off" spellcheck="false">${warnings.map((warning) => `<small class="row-warning">! ${escapeHtml(warning)}</small>`).join('')}</td><td><button class="delete-row" data-delete="${index}" aria-label="${index + 1}번 행 삭제">×</button></td></tr>`; }).join('')}
     </tbody></table></div>
     <button class="add-row" id="addRow">+ 행 추가</button>
-    <label class="title-field">단어장 이름 <span>(선택)</span><input id="listTitle" maxlength="48" placeholder="예: 7월 영단어"></label>
+    <label class="title-field">단어장 이름 <span>(선택)</span><input id="listTitle" maxlength="48" placeholder="${defaultDeckTitle()}"></label>
     <button class="primary wide" id="applyToRovocar">RoVoCar 단어장에 바로 적용 <span>→</span></button>
     <button class="secondary wide download-only" id="download">CSV만 다운로드 <span>↓</span></button>
     ${status(`빈 영어 또는 뜻 행 ${state.rows.length - valid}개는 다운로드에서 제외됩니다.`, 'info')}
@@ -192,7 +193,7 @@ function downloadCsv() {
 function applyToRovocar() {
   const included = preparedRowsOrError();
   if (!included) return;
-  const title = document.querySelector('#listTitle')?.value?.trim() || `사진 단어장 ${new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}`;
+  const title = document.querySelector('#listTitle')?.value?.trim() || defaultDeckTitle();
   localStorage.setItem(TRANSFER_KEY, JSON.stringify({ title, csv: createCsv(included), count: included.length, createdAt: new Date().toISOString() }));
   window.location.href = `${rovocarHomeUrl}?import=csv-maker`;
 }
