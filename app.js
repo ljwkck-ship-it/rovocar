@@ -2,6 +2,7 @@ import { normalizeEnglish, normalizeKorean, parseCsv, koreanAnswerCandidates } f
 
 const STORAGE_KEY = 'rovocar:data:v1';
 const REGISTRY_KEY = 'rovocar:registry:v1';
+const CSV_MAKER_TRANSFER_KEY = 'rovocar:csv-maker-transfer:v1';
 const state = { decks: [], registry: {}, currentDeckId: null, view: 'garage', game: null, deferredInstall: null, importWords: [], importTargetDeckId: null, storageKey: STORAGE_KEY, registryKey: REGISTRY_KEY, cloudUser: null, deckQuery: '', pendingSyncDecision: null, dataVersion: 0 };
 const $ = (id) => document.getElementById(id);
 const els = Object.fromEntries(['garageView','deckView','gameView','resultView','deckGrid','deckTitle','deckSummary','masteryValue','wordCount','wordList','deckDialog','deckForm','deckNameInput','wordDialog','wordForm','wordDialogTitle','englishInput','koreanInput','editingWordId','gameModeLabel','gameTitle','gameCounter','route','routeFill','routeCar','promptLabel','promptText','wordRegistryLabel','speakBtn','answerForm','answerLabel','answerInput','feedback','nextBtn','resultScore','resultRate','resultMessage','retryWrongBtn','toast','installBtn','installDialog','csvInput','appendCsvInput','importDialog','importForm','importSummary','importDeckName','importPreview','importDialogTitle','importConfirmBtn','authBtn','syncBadge','deckSearch','deckResultCount','renameDeckBtn','deleteDeckBtn','renameDialog','renameForm','renameDeckInput','syncDecisionDialog','syncDecisionTitle','syncDecisionCopy','syncUseRemoteBtn','syncKeepLocalBtn'].map(id=>[id,$(id)]));
@@ -43,6 +44,20 @@ function renameCurrentDeck(){const deck=currentDeck();if(!deck)return;els.rename
 function deleteCurrentDeck(){const deck=currentDeck();if(!deck)return;if(!confirm(`“${deck.name}” 단어장과 학습 기록을 삭제할까요?\n이 작업은 되돌릴 수 없어요.`))return;state.decks=state.decks.filter(item=>item.id!==deck.id);state.currentDeckId=null;save();showView('garage');toast('단어장을 삭제했어요.');}
 async function readCsvFile(file,targetDeckId=null){
   if(!file)return;try{const text=await file.text();const words=parseCsv(text).map(word=>({...word,id:uid(),attempts:0,correct:0}));if(!words.length)throw new Error('English,Korean 열이 있는 CSV인지 확인해 주세요.');state.importWords=words;state.importTargetDeckId=targetDeckId;const target=state.decks.find(deck=>deck.id===targetDeckId);els.importDeckName.value=target?.name||file.name.replace(/\.csv$/i,'');els.importDeckName.closest('label').classList.toggle('hidden',Boolean(target));els.importDialogTitle.textContent=target?'CSV 단어 추가 확인':'CSV 단어장 확인';els.importConfirmBtn.textContent=target?'중복 제외하고 단어 추가':'이 단어장 만들기';els.importSummary.textContent=`${words.length}개의 단어를 찾았어요. 아래 미리보기를 확인해 주세요.`;els.importPreview.innerHTML=words.slice(0,12).map(w=>`<div><b>${escapeHtml(w.english)}</b><span>${escapeHtml(w.korean)}</span></div>`).join('')+(words.length>12?`<div><b>외 ${words.length-12}개</b><span>단어가 더 있어요.</span></div>`:'');els.importDialog.showModal();}catch(error){toast(error.message);}finally{els.csvInput.value='';els.appendCsvInput.value='';}}
+function importCsvMakerTransfer(){
+  if(new URLSearchParams(location.search).get('import')!=='csv-maker')return false;
+  let payload;
+  try{payload=JSON.parse(localStorage.getItem(CSV_MAKER_TRANSFER_KEY)||'null');}catch{}
+  localStorage.removeItem(CSV_MAKER_TRANSFER_KEY);
+  history.replaceState(null,'',location.pathname+location.hash);
+  if(!payload?.csv){toast('가져올 CSV 단어장을 찾지 못했어요.');return false;}
+  try{
+    const words=parseCsv(payload.csv).map(word=>({...word,id:uid(),attempts:0,correct:0}));
+    if(!words.length)throw new Error('가져올 단어가 없어요.');
+    const d={id:uid(),name:String(payload.title||'사진 단어장').trim().slice(0,30)||'사진 단어장',createdAt:new Date().toISOString(),words};
+    state.decks.unshift(d);state.currentDeckId=d.id;save();showView('deck');toast(`${words.length}개 단어를 바로 적용했어요.`);return true;
+  }catch(error){toast(error.message);return false;}
+}
 function openWordDialog(word=null){els.wordForm.reset();els.editingWordId.value=word?.id||'';els.englishInput.value=word?.english||'';els.koreanInput.value=word?.korean||'';els.wordDialogTitle.textContent=word?'단어 고치기':'단어 싣기';els.wordForm.querySelector('.primary-btn').textContent=word?'수정 완료':'저장하고 다음 단어';$('finishAddingBtn').classList.toggle('hidden',Boolean(word));els.wordDialog.showModal();setTimeout(()=>els.englishInput.focus(),30);}
 function storeWord(close=false){
   if(!els.wordForm.reportValidity())return false;const d=currentDeck(),editing=d.words.find(w=>w.id===els.editingWordId.value);if(editing){editing.english=els.englishInput.value.trim();editing.korean=els.koreanInput.value.trim();}else d.words.push({id:uid(),english:els.englishInput.value.trim(),korean:els.koreanInput.value.trim(),attempts:0,correct:0});save();renderDeck();if(close||editing){els.wordDialog.close();toast(editing?'단어를 수정했어요.':'단어를 실었어요.');}else{els.wordForm.reset();els.englishInput.focus();toast('단어를 싣고 다음 칸을 열었어요.');}return true;
@@ -84,4 +99,4 @@ async function handleAuth(user){const previous=state.cloudUser;if(previous?.id==
 window.addEventListener('rovocar-cloud',event=>{const detail=event.detail;if(detail.type==='auth')handleAuth(detail.user);if(detail.type==='syncing'){els.syncBadge.textContent='동기화 중';els.syncBadge.className='sync-badge syncing';}if(detail.type==='synced'){els.syncBadge.textContent='동기화됨';els.syncBadge.className='sync-badge synced';}if(detail.type==='offline'){els.syncBadge.textContent='오프라인 저장';els.syncBadge.className='sync-badge';}if(detail.type==='error'){els.syncBadge.textContent='동기화 대기';els.syncBadge.className='sync-badge error';}if(detail.type==='online'&&state.cloudUser)RoVoCloud.sync(state.decks,state.registry).then(handleSyncResult).catch(()=>{});});
 els.syncUseRemoteBtn.addEventListener('click',()=>resolveSyncDecision('remote'));els.syncKeepLocalBtn.addEventListener('click',()=>resolveSyncDecision('local'));
 els.authBtn.addEventListener('click',async()=>{try{if(state.cloudUser){clearTimeout(cloudSyncTimer);els.authBtn.disabled=true;const result=await RoVoCloud.flush(state.decks,state.registry);if(result?.kind){handleSyncResult(result);toast('동기화 내용을 선택한 뒤 로그아웃해 주세요.');return;}handleSyncResult(result);await RoVoCloud.signOut();}else await RoVoCloud.signIn();}catch(error){toast(error.message);}finally{els.authBtn.disabled=false;}});
-loadData().then(async()=>{renderGarage();renderAccount();if(window.RoVoCloud)await RoVoCloud.init();});
+loadData().then(async()=>{renderGarage();renderAccount();if(window.RoVoCloud)await RoVoCloud.init();importCsvMakerTransfer();});

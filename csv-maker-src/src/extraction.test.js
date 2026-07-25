@@ -9,10 +9,13 @@ test('extraction contracts trim valid values without inventing content', () => {
 });
 
 test('extraction contract rejects malformed or oversized model responses', () => {
-  assert.equal(validateExtraction({ ...valid, items: [{ ...valid.items[0], confidence: 'maybe' }] }), null);
-  assert.equal(validateExtraction({ ...valid, items: [{ ...valid.items[0], note: undefined }] }), null);
   assert.equal(validateExtraction({ ...valid, warnings: 'not an array' }), null);
   assert.equal(validateExtraction({ ...valid, items: Array.from({ length: 151 }, () => valid.items[0]) }), null);
+});
+
+test('extraction contract accepts Gemini responses with omitted optional fields', () => {
+  assert.deepEqual(validateExtraction({ items: [{ english: 'apple', korean: '사과' }] }), { items: [{ english: 'apple', korean: '사과', confidence: 'high', note: null }], warnings: [] });
+  assert.deepEqual(validateExtraction([{ english: 'banana', korean: '바나나', confidence: 'maybe', note: null }]), { items: [{ english: 'banana', korean: '바나나', confidence: 'high', note: null }], warnings: [] });
 });
 
 test('a typical 80-pair vocabulary photo is retained in full', () => {
@@ -31,5 +34,6 @@ test('image payload validation accepts only bounded supported base64 images', ()
 test('Gemini JSON parser tolerates fenced or prefixed JSON', () => {
   assert.deepEqual(parseGeminiJson('```json\n{"items":[],"warnings":[]}\n```'), { items: [], warnings: [] });
   assert.deepEqual(parseGeminiJson('result: {"items":[],"warnings":[]}'), { items: [], warnings: [] });
+  assert.deepEqual(parseGeminiJson('result: [{"english":"apple","korean":"사과"}]'), [{ english: 'apple', korean: '사과' }]);
   assert.equal(parseGeminiJson('not json'), null);
 });

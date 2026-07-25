@@ -1,9 +1,11 @@
 import './style.css';
+import './overrides.css';
 import { createClient } from '@supabase/supabase-js';
 import { cleanRows, createCsv, parseVocabularyCsv, safeFilename } from './csv.js';
 
 const app = document.querySelector('#app');
 const indicator = document.querySelector('#stepIndicator');
+const TRANSFER_KEY = 'rovocar:csv-maker-transfer:v1';
 const state = { file: null, objectUrl: null, rotation: 0, rows: [], warnings: [], error: '' };
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -73,6 +75,7 @@ ${sampleMarkup()}
         <div class="red-pencil">검토 후 완성!</div>
       </div>
       ${supabase && !session ? '<button class="upload-cta" id="loginButton"><span>카카오 로그인하고 시작</span><small>가족용 사용량을 안전하게 보호합니다</small></button>' : '<label class="upload-cta" for="photoInput"><span>사진 찍기 또는 선택</span><small>JPEG · PNG · WebP / 한 장씩</small></label>'}
+      <a class="secondary wide garage-return-main" href="${rovocarHomeUrl}">RoVoCar 차고로 돌아가기</a>
       <input id="photoInput" class="sr-only" type="file" accept="image/jpeg,image/png,image/webp" />
       <p class="privacy-note">사진은 추출 요청 처리 후 서버에 저장하지 않으며, 결과는 이 브라우저에서 CSV를 만들 때만 사용됩니다. 실제 추출 때 사진은 <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noreferrer">Gemini 제공자</a>에게 전송됩니다.${supabase ? '' : ' 현재는 로컬 데모 모드입니다.'}</p>
     </section>`;
@@ -149,15 +152,17 @@ function rowWarnings(row, index) {
 function renderReview() {
   setStep('결과 검토');
   const valid = cleanRows(state.rows).length;
-  app.innerHTML = `<section class="review"><p class="eyebrow">추출 초안 · ${valid}개 완성</p><h1>한 번만 확인하면<br><em>준비 끝이에요.</em></h1>
+  app.innerHTML = `<section class="review"><p class="eyebrow">추출 초안</p><h1>한 번만 확인하면<br><em>준비 끝이에요.</em></h1>
+    <div class="extract-count" role="status"><b>${valid}</b><span>개 단어 추출</span></div>
     ${state.warnings.map((warning) => `<p class="warning-banner">확인 필요: ${escapeHtml(warning)}</p>`).join('')}
     ${state.rows.length ? '' : '<div class="empty-result" role="status"><b>읽을 수 있는 단어를 찾지 못했어요.</b><span>사진을 다시 선택하거나 아래에서 직접 행을 추가해 주세요.</span></div>'}
-    <div class="table-wrap"><table><thead><tr><th scope="col">영어 스펠링</th><th scope="col">한글 뜻</th><th><span class="sr-only">행 관리</span></th></tr></thead><tbody>
-      ${state.rows.map((row, index) => { const warnings = rowWarnings(row, index); return `<tr class="${warnings.length ? 'needs-check' : ''}"><td><label class="sr-only" for="english-${index}">${index + 1}번 영어 스펠링</label><input id="english-${index}" data-index="${index}" data-key="english" value="${escapeHtml(row.english)}" placeholder="영어 단어"></td><td><label class="sr-only" for="korean-${index}">${index + 1}번 한글 뜻</label><input id="korean-${index}" data-index="${index}" data-key="korean" value="${escapeHtml(row.korean)}" placeholder="한글 뜻">${warnings.map((warning) => `<small class="row-warning">! ${escapeHtml(warning)}</small>`).join('')}</td><td><button class="delete-row" data-delete="${index}" aria-label="${index + 1}번 행 삭제">×</button></td></tr>`; }).join('')}
+    <div class="table-wrap"><table><thead><tr><th scope="col">번호</th><th scope="col">영어 스펠링</th><th scope="col">한글 뜻</th><th><span class="sr-only">행 관리</span></th></tr></thead><tbody>
+      ${state.rows.map((row, index) => { const warnings = rowWarnings(row, index); return `<tr class="${warnings.length ? 'needs-check' : ''}"><td class="row-number">${index + 1}</td><td><label class="sr-only" for="english-${index}">${index + 1}번 영어 스펠링</label><input id="english-${index}" data-index="${index}" data-key="english" value="${escapeHtml(row.english)}" placeholder="영어 단어" autocomplete="off" autocapitalize="none" spellcheck="false"></td><td><label class="sr-only" for="korean-${index}">${index + 1}번 한글 뜻</label><input id="korean-${index}" data-index="${index}" data-key="korean" value="${escapeHtml(row.korean)}" placeholder="한글 뜻" autocomplete="off" autocorrect="off" spellcheck="false">${warnings.map((warning) => `<small class="row-warning">! ${escapeHtml(warning)}</small>`).join('')}</td><td><button class="delete-row" data-delete="${index}" aria-label="${index + 1}번 행 삭제">×</button></td></tr>`; }).join('')}
     </tbody></table></div>
     <button class="add-row" id="addRow">+ 행 추가</button>
     <label class="title-field">단어장 이름 <span>(선택)</span><input id="listTitle" maxlength="48" placeholder="예: 7월 영단어"></label>
-    <button class="primary wide" id="download">CSV 다운로드 <span>↓</span></button>
+    <button class="primary wide" id="applyToRovocar">RoVoCar 단어장에 바로 적용 <span>→</span></button>
+    <button class="secondary wide download-only" id="download">CSV만 다운로드 <span>↓</span></button>
     ${status(`빈 영어 또는 뜻 행 ${state.rows.length - valid}개는 다운로드에서 제외됩니다.`, 'info')}
   </section>`;
   // Re-render only after the field is committed. Re-rendering on each keystroke
@@ -166,14 +171,30 @@ function renderReview() {
   app.querySelectorAll('[data-delete]').forEach((button) => button.addEventListener('click', () => { state.rows.splice(Number(button.dataset.delete), 1); renderReview(); }));
   document.querySelector('#addRow').addEventListener('click', () => { state.rows.push({ english: '', korean: '', confidence: 'high', note: '' }); renderReview(); });
   document.querySelector('#download').addEventListener('click', downloadCsv);
+  document.querySelector('#applyToRovocar').addEventListener('click', applyToRovocar);
 }
 
-function downloadCsv() {
+function preparedRowsOrError() {
   const included = cleanRows(state.rows);
-  if (!included.length) { renderError('다운로드할 단어가 없어요', '영어와 한글 뜻을 모두 입력한 행을 하나 이상 만들어 주세요.', renderReview); return; }
+  if (!included.length) {
+    renderError('적용할 단어가 없어요', '영어와 한글 뜻을 모두 입력한 행을 하나 이상 만들어 주세요.', renderReview);
+    return null;
+  }
+  return included;
+}
+function downloadCsv() {
+  const included = preparedRowsOrError();
+  if (!included) return;
   const title = document.querySelector('#listTitle')?.value;
   const blob = new Blob([createCsv(included)], { type: 'text/csv;charset=utf-8' });
   const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = safeFilename(title); link.click(); URL.revokeObjectURL(link.href); renderDone(included.length);
+}
+function applyToRovocar() {
+  const included = preparedRowsOrError();
+  if (!included) return;
+  const title = document.querySelector('#listTitle')?.value?.trim() || `사진 단어장 ${new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}`;
+  localStorage.setItem(TRANSFER_KEY, JSON.stringify({ title, csv: createCsv(included), count: included.length, createdAt: new Date().toISOString() }));
+  window.location.href = `${rovocarHomeUrl}?import=csv-maker`;
 }
 function renderDone(count) {
   setStep('다운로드 완료');

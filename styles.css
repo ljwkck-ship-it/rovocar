@@ -13,6 +13,7 @@
 .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .skip-link{position:fixed;z-index:100;top:12px;left:12px;transform:translateY(-160%);border:3px solid var(--navy);border-radius:10px;background:var(--yellow);padding:10px 14px;color:var(--navy);font-weight:900;text-decoration:none;transition:transform .14s}
 .skip-link:focus-visible{transform:translateY(0)}
-button:focus-visible,input:focus-visible,a:focus-visible,[tabindex="-1"]:focus-visible{outline:4px solid #0b5f8c;outline-offset:3px}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:4px solid #0b5f8c;outline-offset:3px}
+[tabindex="-1"]:focus{outline:0}
 .import-btn:focus-within,.search-box:focus-within{border-color:#0b5f8c;outline:4px solid #0b5f8c;outline-offset:3px}
 .import-btn input:focus-visible,.search-box input:focus-visible{outline:0}

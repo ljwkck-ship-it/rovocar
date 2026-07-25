@@ -20,18 +20,20 @@ function text(value) {
 }
 
 export function validateExtraction(value) {
-  if (!value || typeof value !== 'object' || !Array.isArray(value.items) || value.items.length > MAX_EXTRACTION_ITEMS) return null;
+  const source = Array.isArray(value) ? { items: value, warnings: [] } : value;
+  if (!source || typeof source !== 'object' || !Array.isArray(source.items) || source.items.length > MAX_EXTRACTION_ITEMS) return null;
   const items = [];
-  for (const item of value.items) {
+  for (const item of source.items) {
     if (!item || typeof item !== 'object') return null;
     const english = text(item.english);
     const korean = text(item.korean);
-    const note = item.note === null ? null : text(item.note);
-    if (english === null || korean === null || (item.confidence !== 'high' && item.confidence !== 'low') || (note === null && item.note !== null)) return null;
-    items.push({ english, korean, confidence: item.confidence, note });
+    const confidence = item.confidence === 'low' ? 'low' : 'high';
+    const note = item.note == null ? null : text(item.note);
+    if (english === null || korean === null || (note === null && item.note != null)) return null;
+    items.push({ english, korean, confidence, note });
   }
-  if (!Array.isArray(value.warnings)) return null;
-  const warnings = value.warnings.map(text).filter((warning) => warning !== null).slice(0, 20);
+  if (source.warnings !== undefined && !Array.isArray(source.warnings)) return null;
+  const warnings = (source.warnings ?? []).map(text).filter((warning) => warning !== null).slice(0, 20);
   return { items, warnings };
 }
 
@@ -41,12 +43,23 @@ export function parseGeminiJson(text) {
   try {
     return JSON.parse(trimmed);
   } catch {}
+  const firstObject = trimmed.indexOf('{');
+  const firstArray = trimmed.indexOf('[');
+  if (firstArray >= 0 && (firstObject < 0 || firstArray < firstObject)) {
+    const arrayEnd = trimmed.lastIndexOf(']');
+    if (arrayEnd <= firstArray) return null;
+    try {
+      return JSON.parse(trimmed.slice(firstArray, arrayEnd + 1));
+    } catch {
+      return null;
+    }
+  }
   const start = trimmed.indexOf('{');
   const end = trimmed.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(trimmed.slice(start, end + 1));
-  } catch {
-    return null;
+  if (start >= 0 && end > start) {
+    try {
+      return JSON.parse(trimmed.slice(start, end + 1));
+    } catch {}
   }
+  return null;
 }

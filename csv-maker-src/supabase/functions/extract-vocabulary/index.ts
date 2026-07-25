@@ -34,17 +34,18 @@ function isSupportedImagePayload(image: { mimeType?: unknown; data?: unknown }, 
 }
 function text(value: unknown) { return typeof value === 'string' && value.trim().length <= MAX_EXTRACTION_TEXT_LENGTH ? value.trim() : null; }
 function validateExtraction(value: unknown) {
-  if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) return null;
-  const source = value as { items: unknown[]; warnings?: unknown };
-  if (source.items.length > MAX_EXTRACTION_ITEMS || !Array.isArray(source.warnings)) return null;
+  const normalized = Array.isArray(value) ? { items: value, warnings: [] } : value;
+  if (!normalized || typeof normalized !== 'object' || !Array.isArray((normalized as { items?: unknown }).items)) return null;
+  const source = normalized as { items: unknown[]; warnings?: unknown };
+  if (source.items.length > MAX_EXTRACTION_ITEMS || (source.warnings !== undefined && !Array.isArray(source.warnings))) return null;
   const items = [];
   for (const item of source.items) {
     if (!item || typeof item !== 'object') return null;
-    const record = item as Record<string, unknown>; const english = text(record.english); const korean = text(record.korean); const note = record.note === null ? null : text(record.note);
-    if (english === null || korean === null || (record.confidence !== 'high' && record.confidence !== 'low') || (note === null && record.note !== null)) return null;
-    items.push({ english, korean, confidence: record.confidence, note });
+    const record = item as Record<string, unknown>; const english = text(record.english); const korean = text(record.korean); const confidence = record.confidence === 'low' ? 'low' : 'high'; const note = record.note == null ? null : text(record.note);
+    if (english === null || korean === null || (note === null && record.note != null)) return null;
+    items.push({ english, korean, confidence, note });
   }
-  return { items, warnings: source.warnings.map(text).filter((warning): warning is string => warning !== null).slice(0, 20) };
+  return { items, warnings: (source.warnings ?? []).map(text).filter((warning): warning is string => warning !== null).slice(0, 20) };
 }
 const responseSchema = {
   type: 'object', properties: {
@@ -60,12 +61,13 @@ const prompt = `사진에 실제로 읽히는 영어 단어 또는 구와 그에
 async function resolveGeminiModel(key: string) {
   if (selectedGeminiModel) return selectedGeminiModel;
   const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
-  if (!response.ok) return 'models/gemini-2.5-flash';
+  if (!response.ok) return 'models/gemini-3.6-flash';
   const { models = [] } = await response.json() as { models?: Array<{ name?: unknown; supportedGenerationMethods?: unknown }> };
   const usable = models.filter((model) => typeof model.name === 'string' && Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'));
-  const preferred = usable.find((model) => model.name === 'models/gemini-2.5-flash')
-    ?? usable.find((model) => /flash/i.test(String(model.name)) && !/image/i.test(String(model.name)));
-  selectedGeminiModel = String(preferred?.name ?? 'models/gemini-2.5-flash');
+  const preferredNames = ['models/gemini-3.6-flash', 'models/gemini-3.5-flash', 'models/gemini-3.1-flash'];
+  const preferred = preferredNames.map((name) => usable.find((model) => model.name === name)).find(Boolean)
+    ?? usable.find((model) => /flash/i.test(String(model.name)) && !/image|2\.5-flash$/i.test(String(model.name)));
+  selectedGeminiModel = String(preferred?.name ?? 'models/gemini-3.6-flash');
   return selectedGeminiModel;
 }
 
@@ -82,7 +84,6 @@ async function requestGemini(mimeType: string, data: string) {
         contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
         generationConfig: {
           responseMimeType: 'application/json',
-          responseSchema,
           maxOutputTokens: 16384,
           temperature: 0,
         },
@@ -91,14 +92,47 @@ async function requestGemini(mimeType: string, data: string) {
   } finally { clearTimeout(timeout); }
 }
 
+async function safeGeminiError(response: Response) {
+  try {
+    const payload = await response.clone().json() as { error?: { status?: unknown; message?: unknown } };
+    return {
+      upstreamStatus: typeof payload.error?.status === 'string' ? payload.error.status : undefined,
+      upstreamMessage: typeof payload.error?.message === 'string' ? payload.error.message.slice(0, 500) : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 function parseGeminiJson(text: unknown) {
   if (typeof text !== 'string') return null;
   const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
   try { return JSON.parse(trimmed); } catch {}
+  const firstObject = trimmed.indexOf('{');
+  const firstArray = trimmed.indexOf('[');
+  if (firstArray >= 0 && (firstObject < 0 || firstArray < firstObject)) {
+    const arrayEnd = trimmed.lastIndexOf(']');
+    if (arrayEnd <= firstArray) return null;
+    try { return JSON.parse(trimmed.slice(firstArray, arrayEnd + 1)); } catch { return null; }
+  }
   const start = trimmed.indexOf('{');
   const end = trimmed.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try { return JSON.parse(trimmed.slice(start, end + 1)); } catch { return null; }
+  if (start >= 0 && end > start) {
+    try { return JSON.parse(trimmed.slice(start, end + 1)); } catch {}
+  }
+  return null;
+}
+
+function parsedShape(value: unknown) {
+  if (Array.isArray(value)) return { root: 'array', items: value.length };
+  if (!value || typeof value !== 'object') return { root: typeof value };
+  const record = value as { items?: unknown; warnings?: unknown };
+  return {
+    root: 'object',
+    hasItems: Array.isArray(record.items),
+    items: Array.isArray(record.items) ? record.items.length : undefined,
+    hasWarnings: Array.isArray(record.warnings),
+  };
 }
 
 Deno.serve(async (request) => {
@@ -132,20 +166,28 @@ Deno.serve(async (request) => {
     if (quotaError || !quota) throw new Error('quota check failed');
     if (!quota.allowed) return reply(origin, 429, { error: quota.reason === 'daily_limit' ? 'daily_limit' : 'rate_limit', message: quota.reason === 'daily_limit' ? '가족용 오늘 사용 횟수를 모두 썼어요. 내일 다시 시도해 주세요.' : '잠시 후 다시 시도해 주세요.' });
 
+    const geminiModel = await resolveGeminiModel(Deno.env.get('GEMINI_API_KEY_PRIMARY') ?? '');
     const geminiResponse = await requestGemini(mimeType, data);
     if (!geminiResponse.ok) {
       const upstreamStatus = geminiResponse.status;
-      console.error(JSON.stringify({ event: 'gemini_request_failed', status: upstreamStatus }));
+      console.error(JSON.stringify({ event: 'gemini_request_failed', model: geminiModel, status: upstreamStatus, ...await safeGeminiError(geminiResponse) }));
       if (upstreamStatus === 401 || upstreamStatus === 403) return reply(origin, 502, { error: 'gemini_access_denied', message: 'Gemini API 키 설정을 확인해야 합니다.' });
       if (upstreamStatus === 429) return reply(origin, 429, { error: 'gemini_rate_limited', message: 'Gemini 무료 사용량에 도달했습니다. 잠시 뒤 다시 시도해 주세요.' });
       return reply(origin, 502, { error: 'extraction_unavailable', message: 'Gemini가 지금 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
     }
     const geminiPayload = await geminiResponse.json();
-    const text = geminiPayload?.candidates?.[0]?.content?.parts?.find((part: { text?: unknown }) => typeof part.text === 'string')?.text;
+    const candidate = geminiPayload?.candidates?.[0];
+    const text = candidate?.content?.parts?.find((part: { text?: unknown }) => typeof part.text === 'string')?.text;
     const parsed = parseGeminiJson(text);
-    if (!parsed) return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
+    if (!parsed) {
+      console.error(JSON.stringify({ event: 'gemini_parse_failed', model: geminiModel, finishReason: candidate?.finishReason, partCount: Array.isArray(candidate?.content?.parts) ? candidate.content.parts.length : undefined, textLength: typeof text === 'string' ? text.length : 0 }));
+      return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
+    }
     const result = validateExtraction(parsed);
-    if (!result) return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
+    if (!result) {
+      console.error(JSON.stringify({ event: 'gemini_validation_failed', model: geminiModel, shape: parsedShape(parsed) }));
+      return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
+    }
     return reply(origin, 200, result);
   } catch (error) {
     const isTimeout = error instanceof DOMException && error.name === 'AbortError';
