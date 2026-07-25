@@ -57,6 +57,7 @@ const responseSchema = {
 };
 
 const prompt = `사진에 실제로 읽히는 영어 단어 또는 구와 그에 대응하는 한글 뜻만 순서대로 추출하세요. 번호, 제목, 예문, 발음기호, 장식 문구는 제외하세요. 확신하지 못하면 추측하지 말고 confidence를 low로 하고 note에 짧게 이유를 쓰세요. 영어와 한글 뜻의 열을 바꾸지 마세요. JSON 스키마에 맞는 값만 반환하세요.`;
+type QuotaContext = { admin: ReturnType<typeof createClient>; userId: string; usageDate: string; minuteWindow: string };
 
 async function resolveGeminiModel(key: string) {
   if (selectedGeminiModel) return selectedGeminiModel;
@@ -104,6 +105,28 @@ async function safeGeminiError(response: Response) {
   }
 }
 
+function quotaContext(admin: ReturnType<typeof createClient>, userId: string): QuotaContext {
+  const now = new Date();
+  const minuteWindow = new Date(Math.floor(now.getTime() / 60_000) * 60_000).toISOString();
+  return { admin, userId, usageDate: now.toISOString().slice(0, 10), minuteWindow };
+}
+
+async function refundQuota(context: QuotaContext | null) {
+  if (!context) return;
+  const { data: daily } = await context.admin.from('ocr_usage_daily').select('request_count').eq('user_id', context.userId).eq('usage_date', context.usageDate).maybeSingle();
+  const dailyCount = Number(daily?.request_count ?? 0);
+  if (dailyCount > 0) {
+    await context.admin.from('ocr_usage_daily').update({ request_count: dailyCount - 1 }).eq('user_id', context.userId).eq('usage_date', context.usageDate);
+  }
+  const { data: minute } = await context.admin.from('ocr_usage_minute').select('request_count').eq('user_id', context.userId).eq('window_start', context.minuteWindow).maybeSingle();
+  const minuteCount = Number(minute?.request_count ?? 0);
+  if (minuteCount > 1) {
+    await context.admin.from('ocr_usage_minute').update({ request_count: minuteCount - 1 }).eq('user_id', context.userId).eq('window_start', context.minuteWindow);
+  } else if (minuteCount === 1) {
+    await context.admin.from('ocr_usage_minute').delete().eq('user_id', context.userId).eq('window_start', context.minuteWindow);
+  }
+}
+
 function parseGeminiJson(text: unknown) {
   if (typeof text !== 'string') return null;
   const trimmed = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
@@ -144,6 +167,7 @@ Deno.serve(async (request) => {
   if (Number.isFinite(contentLength) && contentLength > asPositiveInt('MAX_REQUEST_BYTES')) return reply(origin, 413, { error: 'image_too_large', message: '사진 파일이 너무 큽니다. 더 작은 사진으로 다시 선택해 주세요.' });
   const auth = request.headers.get('authorization');
   if (!auth?.startsWith('Bearer ')) return reply(origin, 401, { error: 'authentication_required', message: '다시 로그인해 주세요.' });
+  let consumedQuota: QuotaContext | null = null;
 
   try {
     const body: unknown = await request.json();
@@ -162,15 +186,18 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: userData, error: userError } = await admin.auth.getUser(auth.slice(7));
     if (userError || !userData.user) return reply(origin, 401, { error: 'authentication_required', message: '다시 로그인해 주세요.' });
+    consumedQuota = quotaContext(admin, userData.user.id);
     const { data: quota, error: quotaError } = await admin.rpc('consume_ocr_quota', { p_user_id: userData.user.id, p_daily_limit: asPositiveInt('OCR_DAILY_LIMIT'), p_minute_limit: asPositiveInt('OCR_MINUTE_LIMIT') }).single();
     if (quotaError || !quota) throw new Error('quota check failed');
-    if (!quota.allowed) return reply(origin, 429, { error: quota.reason === 'daily_limit' ? 'daily_limit' : 'rate_limit', message: quota.reason === 'daily_limit' ? '가족용 오늘 사용 횟수를 모두 썼어요. 내일 다시 시도해 주세요.' : '잠시 후 다시 시도해 주세요.' });
+    if (!quota.allowed) { consumedQuota = null; return reply(origin, 429, { error: quota.reason === 'daily_limit' ? 'daily_limit' : 'rate_limit', message: quota.reason === 'daily_limit' ? '가족용 오늘 사용 횟수를 모두 썼어요. 내일 다시 시도해 주세요.' : '잠시 후 다시 시도해 주세요.' }); }
 
     const geminiModel = await resolveGeminiModel(Deno.env.get('GEMINI_API_KEY_PRIMARY') ?? '');
     const geminiResponse = await requestGemini(mimeType, data);
     if (!geminiResponse.ok) {
       const upstreamStatus = geminiResponse.status;
       console.error(JSON.stringify({ event: 'gemini_request_failed', model: geminiModel, status: upstreamStatus, ...await safeGeminiError(geminiResponse) }));
+      await refundQuota(consumedQuota);
+      consumedQuota = null;
       if (upstreamStatus === 401 || upstreamStatus === 403) return reply(origin, 502, { error: 'gemini_access_denied', message: 'Gemini API 키 설정을 확인해야 합니다.' });
       if (upstreamStatus === 429) return reply(origin, 429, { error: 'gemini_rate_limited', message: 'Gemini 무료 사용량에 도달했습니다. 잠시 뒤 다시 시도해 주세요.' });
       return reply(origin, 502, { error: 'extraction_unavailable', message: 'Gemini가 지금 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
@@ -181,15 +208,20 @@ Deno.serve(async (request) => {
     const parsed = parseGeminiJson(text);
     if (!parsed) {
       console.error(JSON.stringify({ event: 'gemini_parse_failed', model: geminiModel, finishReason: candidate?.finishReason, partCount: Array.isArray(candidate?.content?.parts) ? candidate.content.parts.length : undefined, textLength: typeof text === 'string' ? text.length : 0 }));
+      await refundQuota(consumedQuota);
+      consumedQuota = null;
       return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
     }
     const result = validateExtraction(parsed);
     if (!result) {
       console.error(JSON.stringify({ event: 'gemini_validation_failed', model: geminiModel, shape: parsedShape(parsed) }));
+      await refundQuota(consumedQuota);
+      consumedQuota = null;
       return reply(origin, 502, { error: 'invalid_extraction', message: '안전하게 표시할 수 없는 결과예요. 사진을 바꿔 다시 시도해 주세요.' });
     }
     return reply(origin, 200, result);
   } catch (error) {
+    await refundQuota(consumedQuota);
     const isTimeout = error instanceof DOMException && error.name === 'AbortError';
     return reply(origin, 503, { error: isTimeout ? 'extraction_timeout' : 'temporarily_unavailable', message: isTimeout ? '시간이 걸리고 있어요. 잠시 뒤 다시 시도해 주세요.' : '지금은 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
   }
