@@ -1,6 +1,6 @@
 # RoVoCar
 
-RoVoCar는 종이 영어 단어장을 CSV로 변환해 등록하고, 반복 퀴즈로 학습하는 가족용 PWA입니다. VoCat의 단어장·주행형 학습 UX를 참고하되, 사진 OCR이나 LLM API를 앱에 직접 넣지 않고 사용자가 ChatGPT/Codex로 만든 CSV를 불러오는 방식으로 구성했습니다.
+RoVoCar는 종이 영어 단어장을 사진으로 읽어 단어장에 등록하고, 반복 퀴즈로 학습하는 가족용 PWA입니다. VoCat의 단어장·주행형 학습 UX를 참고하되, CSV Maker를 RoVoCar 하위 기능으로 통합해 사진 추출, CSV 다운로드, 단어장 바로 적용 흐름을 함께 제공합니다.
 
 ## 서비스 주소
 
@@ -15,14 +15,23 @@ RoVoCar는 종이 영어 단어장을 CSV로 변환해 등록하고, 반복 퀴�
 
 ## 2026-07-25 진행 상태
 
-### RoVoCar / CSV Maker 통합
+### 최종 반영 상태
 
 - 기존 별도 프로젝트 `RoVoCar_CSV_Maker/`의 소스와 정적 빌드 산출물을 현재 RoVoCar 저장소로 통합했습니다.
 - CSV Maker 소스는 `csv-maker-src/`에서 관리합니다.
 - GitHub Pages 배포용 정적 산출물은 `csv-maker/`에 생성합니다.
 - 통합 운영 주소는 <https://ljwkck-ship-it.github.io/rovocar/csv-maker/> 입니다.
 - RoVoCar 첫 화면에는 `사진으로 CSV 만들기` 링크를 추가했습니다.
-- GitHub Pages latest build는 커밋 `41dcf82` 기준 `built` 상태를 확인했습니다.
+- CSV Maker 시작 화면과 업로드 화면에는 `RoVoCar 차고로 돌아가기` 네비게이션을 추가했습니다.
+- CSV 추출 완료 후에는 CSV 다운로드뿐 아니라 `RoVoCar 단어장에 바로 적용` 버튼으로 단어장을 넘길 수 있습니다.
+- 바로 적용 데이터는 `localStorage`의 `rovocar:csv-maker-transfer:v1` 키로 전달하고, RoVoCar가 로그인 사용자 저장소를 준비한 뒤 가져옵니다.
+- 로그인 상태에서 바로 적용한 단어장은 Supabase 동기화 시 `forcePush`로 업로드해 다른 기기에서도 보이도록 처리했습니다.
+- 이미지 기반 추출 결과 화면에는 전체 추출 단어 수를 표시합니다.
+- `영어와 뜻을 나누고 있어요.` 추출 대기 화면에는 진행바를 추가했습니다.
+- 단어장 이름 입력의 기본 플레이스홀더와 미입력 시 제목은 `YYYY-MM-DD 영단어` 형식입니다.
+- 첫 화면 타이틀에 생기던 파란색 포커스 박스는 `[tabindex="-1"]` 포커스 스타일을 분리해 제거했습니다.
+- 운영 PWA 캐시는 `rovocar-v22`, 사용자 앱 번들은 `app.js?v=20` 기준입니다.
+- GitHub Pages 배포는 커밋 `f96d490` 기준 완료를 확인했습니다.
 
 관련 커밋:
 
@@ -30,9 +39,23 @@ RoVoCar는 종이 영어 단어장을 CSV로 변환해 등록하고, 반복 퀴�
 f93864c Integrate CSV Maker into RoVoCar Pages
 3a12380 Harden Gemini extraction response parsing
 41dcf82 Randomize CSV Maker sample vocabulary
+e81b8a6 Connect CSV maker to RoVoCar import flow
+736559b Refund OCR quota on failed extraction
+6c7809d Apply CSV maker transfer after auth storage setup
+f96d490 Improve CSV maker progress and import sync
 ```
 
-### CSV Maker 첫 화면 샘플 단어 랜덤화
+### CSV Maker 추출 안정화
+
+- Supabase Edge Function `extract-vocabulary`를 CLI로 배포했습니다.
+- Gemini 모델은 사용 가능한 Flash 계열을 조회해 선택하며, 더 이상 사용 불가한 `gemini-2.5-flash`에 고정하지 않습니다.
+- Gemini 요청에서는 `responseMimeType: 'application/json'`만 사용하고, 스키마 지정으로 인한 upstream 오류를 피합니다.
+- 응답 파서는 top-level JSON 배열, optional 필드 누락, fenced JSON을 처리합니다.
+- Gemini 실패, 파싱 실패, 검증 실패, 타임아웃은 가족용 일일 OCR 카운터에서 환불되도록 했습니다.
+- 로그에는 원본 사진이나 토큰을 남기지 않고, 실패 상태와 모델명 등 진단에 필요한 값만 남깁니다.
+- 2026-07-25 운영 환경에서 이미지 추출과 CSV 다운로드 성공을 확인했습니다.
+
+### CSV Maker 첫 화면 샘플 단어
 
 - 첫 화면 종이 샘플의 2개 단어는 더 이상 하드코딩된 `take care of / involve`만 사용하지 않습니다.
 - `reference/` CSV 4개를 `csv-maker-src/public/reference/`와 `csv-maker/reference/`에 포함했습니다.
@@ -53,87 +76,18 @@ node ../tests/smoke.mjs
 - RoVoCar smoke test 통과
 - 로컬 브라우저에서 랜덤 샘플 표시 확인
 
-### CSV 추출 실패 상태
+### 이전 별도 CSV Maker 폴더
 
-리얼 환경에서 이미지 업로드 후 `단어 추출하기`를 실행하면 다음 오류가 재현되었습니다.
+- `/Users/leejiwon/projects/RoVoCar_CSV_Maker/`는 통합 이전의 별도 프로젝트 폴더입니다.
+- 현재 운영 기준 소스는 이 저장소의 `csv-maker-src/`와 `csv-maker/`입니다.
+- 비교 결과 통합본에는 추가 수정 사항이 들어가 있으며, 기존 폴더의 `src/`, `supabase/`, `public/`은 최신 운영본과 다릅니다.
+- 기존 폴더에는 `.env.production`, `PRD.md`, `DECISIONS.md`, `rovocar-mvp-review.md` 같은 개인 작업 파일이 남아 있으므로 필요한 내용만 확인한 뒤 삭제해도 됩니다.
 
-```text
-추출을 완료하지 못했어요
-Gemini가 지금 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.
-```
-
-이 오류는 현재 코드상 다음 단계까지 통과했음을 의미합니다.
-
-```text
-브라우저 업로드
-→ Supabase Edge Function 호출
-→ 로그인 토큰 확인
-→ 사용량 제한 확인
-→ Gemini API 호출
-→ Gemini non-OK 응답
-```
-
-따라서 CORS, 카카오 로그인, 파일 업로드 자체보다는 Gemini 호출 단계가 문제입니다.
-
-GitHub에는 Gemini 응답 처리를 보강한 `3a12380` 커밋이 올라가 있습니다.
-
-- Gemini 요청에 `responseSchema` 추가
-- Gemini 응답이 fenced JSON 또는 prefix가 붙은 JSON이어도 파싱하도록 fallback 추가
-- 관련 테스트 추가
-
-하지만 이 수정의 핵심 파일은 Supabase Edge Function입니다.
-
-```text
-csv-maker-src/supabase/functions/extract-vocabulary/index.ts
-```
-
-GitHub Pages 배포만으로는 Supabase Edge Function이 자동 갱신되지 않습니다. `extract-vocabulary`는 별도 재배포가 필요합니다.
-
-### 다음 세션에서 바로 할 일
-
-1. Supabase CLI 인증을 먼저 완료합니다.
-
-   ```bash
-   cd /Users/leejiwon/projects/RoVoCa_PWA/csv-maker-src
-   npx supabase login --token YOUR_SUPABASE_ACCESS_TOKEN
-   ```
-
-   토큰은 Supabase Dashboard의 Account → Access Tokens에서 생성합니다. 토큰은 채팅이나 README에 기록하지 않습니다.
-
-2. 인증 후 Edge Function을 배포합니다.
-
-   ```bash
-   npx supabase functions deploy extract-vocabulary --project-ref txmepzwyduasgunultwa
-   ```
-
-3. 배포 후 리얼 환경에서 같은 이미지로 다시 테스트합니다.
-
-   ```text
-   https://ljwkck-ship-it.github.io/rovocar/csv-maker/
-   ```
-
-4. 실패가 반복되면 Supabase Dashboard → Edge Functions → `extract-vocabulary` → Logs에서 최신 로그의 아래 값을 확인합니다.
-
-   ```text
-   gemini_request_failed status
-   error
-   message
-   ```
-
-   판단 기준:
-
-   ```text
-   400 → Gemini 요청 body 또는 schema 형식 문제
-   401/403 → Gemini API key 권한 문제
-   404 → Gemini 모델명 또는 모델 접근 문제
-   429 → Gemini quota 문제
-   502/503 → Gemini 또는 함수 일시 실패/타임아웃
-   ```
-
-### 주의
+### 운영 주의
 
 - Supabase Dashboard Code 에디터는 브라우저 번역/Monaco 편집기 영향으로 자동화 편집이 안전하지 않았습니다.
 - 수동 Dashboard 복사/붙여넣기보다 Supabase CLI 배포를 권장합니다.
+- Supabase Edge Function 수정은 GitHub Pages 배포와 별개로 `npx supabase functions deploy extract-vocabulary --project-ref txmepzwyduasgunultwa`를 실행해야 운영에 반영됩니다.
 - `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY_PRIMARY`, Supabase access token, Authorization 헤더, 원본 사진 base64는 README, Git, 채팅에 남기지 않습니다.
 
 ## 2026-07-18 작업 내역
