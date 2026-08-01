@@ -11,6 +11,7 @@ assert.match(contents['index.html'], /id="deckSearch" name="deck-search" type="s
 assert.match(contents['index.html'], /id="route" class="route" role="progressbar"/);
 assert.match(contents['index.html'], /<dialog id="deckDialog" aria-labelledby="deckDialogTitle">/);
 assert.match(contents['index.html'], /<dialog id="syncDecisionDialog" aria-labelledby="syncDecisionTitle">/);
+assert.match(contents['index.html'], /data-mode="card"/);
 assert.match(contents['index.html'], /data-mode="en-ko"/);
 assert.match(contents['index.html'], /data-mode="ko-en"/);
 assert.match(contents['index.html'], /id="csvInput"/);
@@ -23,7 +24,9 @@ assert.match(contents['csv-maker-src/supabase/functions/extract-vocabulary/index
 assert.match(contents['app.js'], /localStorage/);
 assert.match(contents['app.js'], /registryNo/);
 assert.match(contents['app.js'], /deleteCurrentDeck/);
+assert.match(contents['app.js'], /deleteWord/);
 assert.match(contents['app.js'], /importTargetDeckId/);
+assert.match(contents['app.js'], /MODE_META/);
 assert.match(contents['app.js'], /syncDecisionDialog/);
 assert.match(contents['app.js'], /focusViewHeading/);
 assert.match(contents['app.js'], /aria-valuetext/);
@@ -32,8 +35,10 @@ assert.match(contents['styles.css'], /\.import-btn:focus-within/);
 assert.match(contents['admin.html'], /<label class="sr-only" for="adminSearch">표시 이름 검색<\/label>/);
 assert.match(contents['admin.css'], /button:focus-visible,input:focus-visible,a:focus-visible/);
 assert.match(contents['cloud.js'], /migration-choice/);
+assert.match(contents['cloud.js'], /mode_stats/);
 assert.match(contents['cloud.js'], /remoteChanged/);
 assert.match(contents['supabase/schema.sql'], /enable row level security/);
+assert.match(contents['supabase/schema.sql'], /mode_stats jsonb/);
 assert.match(contents['supabase/schema.sql'], /is_rovocar_admin/);
 assert.doesNotMatch(contents['supabase-config.js'], /service_role|sb_secret_/i);
 assert.match(contents['app.js'], /serviceWorker\.register/);
@@ -50,7 +55,7 @@ const englishWords = csvLines.slice(1).map(line => line.match(/^([^,]+)/)?.[1]);
 assert.equal(new Set(englishWords).size, 80, '영어 단어가 중복되었습니다.');
 assert.ok(englishWords.every(word => /^[a-z][a-z -]*$/i.test(word)), '영어 열 형식을 확인하세요.');
 
-console.log('RoVoCar smoke test passed: PWA files, two game modes, CSV import, reference data');
+console.log('RoVoCar smoke test passed: PWA files, three game modes, file import, reference data');
 
 function parseCsv(text) {
   const rows=[]; let row=[], field='', quoted=false;

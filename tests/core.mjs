@@ -10,11 +10,13 @@ assert.deepEqual(csv, [
   { english:'right, correct', korean:'옳은' }
 ]);
 
-const first={decks:[{id:'deck-b',name:'B',createdAt:'2026-07-18',words:[{id:'word-2',english:'seal',korean:'가두다',attempts:0,correct:0,registryNo:2},{id:'word-1',english:'apple',korean:'사과',attempts:1,correct:1,registryNo:1}]}],registry:{seal:2,apple:1}};
+const first={decks:[{id:'deck-b',name:'B',createdAt:'2026-07-18',words:[{id:'word-2',english:'seal',korean:'가두다',attempts:0,correct:0,registryNo:2},{id:'word-1',english:'apple',korean:'사과',attempts:1,correct:1,registryNo:1,stats:{card:{attempts:1,correct:1}}}]}],registry:{seal:2,apple:1}};
 const reordered={decks:[{...first.decks[0],words:[...first.decks[0].words].reverse()}],registry:{apple:1,seal:2}};
 assert.equal(dataSnapshot(first.decks,first.registry),dataSnapshot(reordered.decks,reordered.registry),'정렬 순서만 달라져도 동기화 충돌로 판단하면 안 됩니다.');
 const changed={...first,decks:[{...first.decks[0],name:'수정됨'}]};
 assert.notEqual(dataSnapshot(first.decks,first.registry),dataSnapshot(changed.decks,changed.registry),'실제 변경은 동기화 충돌로 감지해야 합니다.');
+const statsChanged={...first,decks:[{...first.decks[0],words:[{...first.decks[0].words[0]},{...first.decks[0].words[1],stats:{card:{attempts:1,correct:0}}}]}]};
+assert.notEqual(dataSnapshot(first.decks,first.registry),dataSnapshot(statsChanged.decks,statsChanged.registry),'모드별 학습 기록 변경도 동기화 충돌로 감지해야 합니다.');
 
 assert.equal(syncPlan({isFirstLogin:true,localDeckCount:1,remoteDeckCount:2,isDirty:false,remoteChanged:false}),'migration-choice');
 assert.equal(syncPlan({isFirstLogin:true,localDeckCount:1,remoteDeckCount:2,isDirty:false,remoteChanged:false,forcePush:true}),'push');

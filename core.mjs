@@ -22,10 +22,17 @@ export function dataSnapshot(decks=[], registry={}) {
     id:deck.id,
     name:deck.name,
     createdAt:deck.createdAt,
-    words:[...(deck.words||[])].map(word=>({id:word.id,english:word.english,korean:word.korean,attempts:word.attempts||0,correct:word.correct||0,registryNo:word.registryNo||null})).sort((a,b)=>String(a.id).localeCompare(String(b.id)))
+    words:[...(deck.words||[])].map(word=>({id:word.id,english:word.english,korean:word.korean,attempts:word.attempts||0,correct:word.correct||0,registryNo:word.registryNo||null,stats:normalizeStats(word.stats)})).sort((a,b)=>String(a.id).localeCompare(String(b.id)))
   })).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
   const normalizedRegistry=Object.fromEntries(Object.entries(registry||{}).sort(([a],[b])=>a.localeCompare(b)));
   return JSON.stringify({decks:normalizedDecks,registry:normalizedRegistry});
+}
+
+function normalizeStats(stats={}) {
+  return Object.fromEntries(['card','meaning','spelling'].map(key=>[
+    key,
+    { attempts:Math.max(0,Number(stats?.[key]?.attempts)||0), correct:Math.max(0,Number(stats?.[key]?.correct)||0) }
+  ]));
 }
 
 export function syncPlan({ isFirstLogin, localDeckCount, remoteDeckCount, isDirty, remoteChanged, forcePush=false }) {

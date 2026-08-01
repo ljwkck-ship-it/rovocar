@@ -37,14 +37,17 @@ import { dataSnapshot, syncPlan } from './core.mjs';
     if (!client || !user) return null;
     const { data: decks, error: deckError } = await client.from('decks').select('id,name,created_at,order_index').order('order_index');
     if (deckError) throw deckError;
-    const { data: words, error: wordError } = await client.from('words').select('id,deck_id,english,korean,attempts,correct,registry_no,order_index').order('order_index');
+    let { data: words, error: wordError } = await client.from('words').select('id,deck_id,english,korean,attempts,correct,registry_no,mode_stats,order_index').order('order_index');
+    if (wordError && /mode_stats/i.test(wordError.message || '')) {
+      ({ data: words, error: wordError } = await client.from('words').select('id,deck_id,english,korean,attempts,correct,registry_no,order_index').order('order_index'));
+    }
     if (wordError) throw wordError;
     const { data: registryRows, error: registryError } = await client.from('vocabulary_registry').select('english_normalized,registry_no');
     if (registryError) throw registryError;
     const grouped = new Map();
     for (const word of words || []) {
       if (!grouped.has(word.deck_id)) grouped.set(word.deck_id, []);
-      grouped.get(word.deck_id).push({ id: word.id, english: word.english, korean: word.korean, attempts: word.attempts, correct: word.correct, registryNo: word.registry_no });
+      grouped.get(word.deck_id).push({ id: word.id, english: word.english, korean: word.korean, attempts: word.attempts, correct: word.correct, registryNo: word.registry_no, stats: word.mode_stats || {} });
     }
     return { decks:(decks || []).map(deck => ({ id: deck.id, name: deck.name, createdAt: deck.created_at, words: grouped.get(deck.id) || [] })), registry:Object.fromEntries((registryRows||[]).map(row=>[row.english_normalized,row.registry_no])) };
   }

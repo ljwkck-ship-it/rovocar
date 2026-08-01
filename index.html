@@ -25,7 +25,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/rovocar.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-180.png">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">본문으로 건너뛰기</a>
@@ -49,8 +49,8 @@
           <div>
             <p class="eyebrow">MY WORD GARAGE</p>
             <h1 id="garageTitle" tabindex="-1">오늘 외울 단어,<br><em>어느 차에 실을까요?</em></h1>
-            <p class="hero-copy">단어장을 만들고 두 가지 주행 모드로 반복해서 맞혀 보세요.</p>
-            <a class="csv-maker-link" href="csv-maker/">손글씨 단어장이 있나요? 사진으로 CSV 만들기 <span aria-hidden="true">↗</span></a>
+            <p class="hero-copy">사진이나 직접 입력으로 단어장을 만들고 카드, 뜻, 스펠링 순서로 반복해 보세요.</p>
+            <a class="csv-maker-link primary-photo" href="csv-maker/">사진으로 단어장 만들기 <span aria-hidden="true">↗</span></a>
           </div>
           <div class="hero-sign" aria-hidden="true"><span>READY</span><b>출발 준비</b></div>
         </div>
@@ -58,7 +58,7 @@
         <div class="section-head">
           <div><p class="eyebrow">GARAGE</p><h2>내 단어장</h2></div>
           <div class="head-actions">
-            <label class="import-btn" for="csvInput">⇧ CSV 불러오기<input id="csvInput" type="file" accept=".csv,text/csv"></label>
+            <label class="import-btn" for="csvInput">⇧ 파일 불러오기<input id="csvInput" type="file" accept=".csv,text/csv"></label>
             <button id="newDeckBtn" class="primary-btn" type="button"><span>＋</span> 직접 만들기</button>
           </div>
         </div>
@@ -78,22 +78,26 @@
             <p id="deckSummary" class="hero-copy"></p>
             <div class="deck-actions"><button id="renameDeckBtn" class="text-action" type="button">이름 바꾸기</button><span aria-hidden="true">·</span><button id="deleteDeckBtn" class="delete-action" type="button">단어장 삭제</button></div>
           </div>
-          <div class="dashboard-score"><span id="masteryValue">0%</span><small>정답률</small></div>
+          <div class="dashboard-score"><span id="masteryValue">0%</span><small>종합 정답률</small></div>
         </div>
+        <div id="modeStats" class="mode-stats" aria-label="모드별 정답률"></div>
 
         <div class="mode-grid">
+          <button class="mode-card yellow" type="button" data-mode="card">
+            <span class="mode-no">DRIVE 01</span><b>카드 맞히기</b><small>영어 카드를 뒤집고 외웠는지 표시</small><span class="mode-arrow">출발 →</span>
+          </button>
           <button class="mode-card blue" type="button" data-mode="en-ko">
-            <span class="mode-no">DRIVE 01</span><b>뜻 맞히기</b><small>영어를 보고 한글 뜻 입력</small><span class="mode-arrow">출발 →</span>
+            <span class="mode-no">DRIVE 02</span><b>뜻 맞히기</b><small>영어를 보고 한글 뜻 입력</small><span class="mode-arrow">출발 →</span>
           </button>
           <button class="mode-card red" type="button" data-mode="ko-en">
-            <span class="mode-no">DRIVE 02</span><b>스펠링 맞히기</b><small>한글 뜻을 보고 영어 입력</small><span class="mode-arrow">출발 →</span>
+            <span class="mode-no">DRIVE 03</span><b>스펠링 맞히기</b><small>한글 뜻을 보고 영어 입력</small><span class="mode-arrow">출발 →</span>
           </button>
         </div>
 
         <div class="word-section">
           <div class="section-head compact">
             <div><p class="eyebrow">CARGO LIST</p><h2>실린 단어 <span id="wordCount"></span></h2></div>
-            <div class="word-actions"><label class="import-btn compact" for="appendCsvInput">⇧ CSV로 추가<input id="appendCsvInput" type="file" accept=".csv,text/csv"></label><button id="addWordBtn" class="secondary-btn" type="button">＋ 직접 추가</button></div>
+            <div class="word-actions"><label class="import-btn compact" for="appendCsvInput">⇧ 파일로 추가<input id="appendCsvInput" type="file" accept=".csv,text/csv"></label><button id="addWordBtn" class="secondary-btn" type="button">＋ 직접 추가</button></div>
           </div>
           <div id="wordList" class="word-list"></div>
         </div>
@@ -119,6 +123,13 @@
               <button class="primary-btn" type="submit">확인</button>
             </div>
           </form>
+          <div id="cardControls" class="card-controls hidden">
+            <button id="cardRevealBtn" class="primary-btn wide" type="button">카드 뒤집기</button>
+            <div id="cardMarkActions" class="card-mark-actions hidden" aria-label="외운 단어 표시">
+              <button id="cardKnownBtn" class="mark-btn known" type="button">O</button>
+              <button id="cardUnknownBtn" class="mark-btn unknown" type="button">X</button>
+            </div>
+          </div>
           <div id="feedback" class="feedback hidden" role="status" aria-live="polite"></div>
           <button id="nextBtn" class="next-btn hidden" type="button">다음 단어 →</button>
         </article>
@@ -207,7 +218,7 @@
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js" defer></script>
   <script src="supabase-config.js?v=1" defer></script>
-  <script type="module" src="cloud.js?v=5"></script>
-  <script type="module" src="app.js?v=21"></script>
+  <script type="module" src="cloud.js?v=6"></script>
+  <script type="module" src="app.js?v=22"></script>
 </body>
 </html>

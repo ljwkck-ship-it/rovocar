@@ -21,6 +21,7 @@ create table if not exists public.words (
 );
 
 alter table public.words add column if not exists registry_no integer;
+alter table public.words add column if not exists mode_stats jsonb not null default '{}'::jsonb;
 
 create table if not exists public.vocabulary_registry (
   user_id uuid not null references auth.users(id) on delete cascade,
@@ -142,13 +143,13 @@ begin
     loop
       select registry_no into assigned_registry_no from public.vocabulary_registry
       where user_id=owner_id and english_normalized=lower(trim(word_item->>'english'));
-      insert into public.words(id,deck_id,user_id,english,korean,attempts,correct,registry_no,order_index,updated_at)
+      insert into public.words(id,deck_id,user_id,english,korean,attempts,correct,registry_no,mode_stats,order_index,updated_at)
       values (
         word_item->>'id', deck_item->>'id', owner_id,
         word_item->>'english', word_item->>'korean',
         greatest(coalesce((word_item->>'attempts')::integer,0),0),
         greatest(coalesce((word_item->>'correct')::integer,0),0),
-        assigned_registry_no, word_position, now()
+        assigned_registry_no, coalesce(word_item->'stats','{}'::jsonb), word_position, now()
       );
       word_position := word_position + 1;
     end loop;
