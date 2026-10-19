@@ -7,6 +7,7 @@ const MAX_EXTRACTION_ITEMS = 150;
 const MAX_EXTRACTION_TEXT_LENGTH = 300;
 const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 let selectedGeminiModel: string | null = null;
+let modelSelectedAt = 0;
 const JSON_HEADERS = {
   'content-type': 'application/json; charset=utf-8',
   'cache-control': 'no-store',
@@ -49,7 +50,7 @@ function validateExtraction(value: unknown) {
 }
 const responseSchema = {
   type: 'object', properties: {
-    items: { type: 'array', maxItems: MAX_EXTRACTION_ITEMS, items: { type: 'object', properties: {
+    items: { type: 'array', items: { type: 'object', properties: {
       english: { type: 'string' }, korean: { type: 'string' }, confidence: { type: 'string', enum: ['high', 'low'] }, note: { type: ['string', 'null'] },
     }, required: ['english', 'korean', 'confidence', 'note'] } },
     warnings: { type: 'array', items: { type: 'string' } },
@@ -59,37 +60,72 @@ const responseSchema = {
 const prompt = `사진에 실제로 읽히는 영어 단어 또는 구와 그에 대응하는 한글 뜻만 순서대로 추출하세요. 번호, 제목, 예문, 발음기호, 장식 문구는 제외하세요. 확신하지 못하면 추측하지 말고 confidence를 low로 하고 note에 짧게 이유를 쓰세요. 영어와 한글 뜻의 열을 바꾸지 마세요. JSON 스키마에 맞는 값만 반환하세요.`;
 type QuotaContext = { admin: ReturnType<typeof createClient>; userId: string; usageDate: string; minuteWindow: string };
 
-async function resolveGeminiModel(key: string) {
-  if (selectedGeminiModel) return selectedGeminiModel;
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', { headers: { 'x-goog-api-key': key } });
-  if (!response.ok) return 'models/gemini-3.6-flash';
-  const { models = [] } = await response.json() as { models?: Array<{ name?: unknown; supportedGenerationMethods?: unknown }> };
-  const usable = models.filter((model) => typeof model.name === 'string' && Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent'));
-  const preferredNames = ['models/gemini-3.6-flash', 'models/gemini-3.5-flash', 'models/gemini-3.1-flash'];
-  const preferred = preferredNames.map((name) => usable.find((model) => model.name === name)).find(Boolean)
-    ?? usable.find((model) => /flash/i.test(String(model.name)) && !/image|2\.5-flash$/i.test(String(model.name)));
-  selectedGeminiModel = String(preferred?.name ?? 'models/gemini-3.6-flash');
+// Preserve discovery errors for the same safe status handling as generation errors.
+class GeminiDiscoveryError extends Error {
+  response: Response;
+  constructor(response: Response) { super('Gemini model discovery failed'); this.response = response; }
+}
+
+async function resolveGeminiModel(key: string, signal?: AbortSignal, avoidModel?: string): Promise<string> {
+  if (selectedGeminiModel && selectedGeminiModel !== avoidModel && Date.now() - modelSelectedAt < 5 * 60_000) return selectedGeminiModel;
+  const usable: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL('https://generativelanguage.googleapis.com/v1beta/models');
+    url.searchParams.set('pageSize', '1000');
+    if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const response = await fetch(url.toString(), { signal, headers: { 'x-goog-api-key': key } });
+    if (!response.ok) throw new GeminiDiscoveryError(response);
+    const payload = await response.json() as { models?: Array<{ name?: unknown; supportedGenerationMethods?: unknown }>; nextPageToken?: string };
+    for (const model of payload.models ?? []) {
+      if (typeof model.name === 'string' && /^models\/gemini-\d+(?:\.\d+)*-flash(?:-[\w.-]+)?$/i.test(model.name)
+        && !/image|live|audio|tts|robotics/i.test(model.name)
+        && Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent')) usable.push(model.name);
+    }
+    pageToken = payload.nextPageToken;
+  } while (pageToken);
+  // Prefer stable, full Flash over preview/Lite variants, then the newest version.
+  usable.sort((a, b) => Number(/preview|exp/i.test(a)) - Number(/preview|exp/i.test(b))
+    || Number(/lite/i.test(a)) - Number(/lite/i.test(b)) || b.localeCompare(a, 'en', { numeric: true }));
+  if (!usable.length) throw new GeminiDiscoveryError(Response.json({ error: { status: 'NOT_FOUND', message: 'No available Flash model for vocabulary extraction' } }, { status: 503 }));
+  selectedGeminiModel = usable.find((name) => name !== avoidModel) ?? usable[0];
+  modelSelectedAt = Date.now();
   return selectedGeminiModel;
 }
 
 async function requestGemini(mimeType: string, data: string) {
   const key = Deno.env.get('GEMINI_API_KEY_PRIMARY');
   if (!key) throw new Error('gemini key missing');
-  const model = await resolveGeminiModel(key);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25_000);
   try {
-    return await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
-      method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
-        generationConfig: {
-          responseMimeType: 'application/json',
-          maxOutputTokens: 16384,
-          temperature: 0,
-        },
-      }),
-    });
+    let avoidModel: string | undefined;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const model = await resolveGeminiModel(key, controller.signal, avoidModel);
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${model}:generateContent`, {
+        method: 'POST', signal: controller.signal, headers: { 'content-type': 'application/json', 'x-goog-api-key': key },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
+          generationConfig: {
+            responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: responseSchema } },
+            maxOutputTokens: 16384,
+            temperature: 0,
+          },
+        }),
+      });
+      // Keep the timeout active until the response body has also been received.
+      const body = await response.text();
+      if (response.status === 404 || response.status === 503) {
+        selectedGeminiModel = null;
+        avoidModel = model;
+        if (attempt === 0) continue;
+      }
+      return new Response(body, { status: response.status, headers: response.headers });
+    }
+    throw new Error('Gemini retry exhausted');
+  } catch (error) {
+    if (error instanceof GeminiDiscoveryError) return error.response;
+    throw error;
   } finally { clearTimeout(timeout); }
 }
 
@@ -191,8 +227,8 @@ Deno.serve(async (request) => {
     if (quotaError || !quota) throw new Error('quota check failed');
     if (!quota.allowed) { consumedQuota = null; return reply(origin, 429, { error: quota.reason === 'daily_limit' ? 'daily_limit' : 'rate_limit', message: quota.reason === 'daily_limit' ? '가족용 오늘 사용 횟수를 모두 썼어요. 내일 다시 시도해 주세요.' : '잠시 후 다시 시도해 주세요.' }); }
 
-    const geminiModel = await resolveGeminiModel(Deno.env.get('GEMINI_API_KEY_PRIMARY') ?? '');
     const geminiResponse = await requestGemini(mimeType, data);
+    const geminiModel = selectedGeminiModel;
     if (!geminiResponse.ok) {
       const upstreamStatus = geminiResponse.status;
       console.error(JSON.stringify({ event: 'gemini_request_failed', model: geminiModel, status: upstreamStatus, ...await safeGeminiError(geminiResponse) }));

@@ -51,6 +51,18 @@ MAX_REQUEST_BYTES
 
 함수 코드를 변경했다면 Supabase Dashboard의 **Edge Functions → extract-vocabulary → Code**에서 `index.ts` 전체를 로컬 파일 내용으로 교체하고 **Update deploy**를 눌러야 합니다. GitHub push만으로는 함수가 배포되지 않습니다.
 
+## 2026-10-20 Gemini 추출 오류 복구
+
+- 운영 로그에서 `gemini-3.6-flash`의 HTTP 503 `UNAVAILABLE`과 high demand 응답을 확인했습니다. 최초 요청 실패의 원인은 Gemini 모델 혼잡입니다.
+- 실제 반환된 일반 Gemini Flash 모델 중 안정 버전을 우선 선택합니다. 목록의 모든 페이지를 조회하며, 이미지 생성·실시간·음성·Omni 모델을 제외합니다. 검증 중 Omni 모델은 무료 한도 0으로 HTTP 429를 반환했습니다.
+- 모델 캐시는 5분 후 갱신합니다. HTTP 404·503이면 목록을 재조회해 다른 가용 모델을 우선 선택하고 한 번만 재시도합니다. 403·429는 추가 생성 요청 없이 기존 오류 처리에 전달합니다.
+- 공식 REST 형식인 `responseFormat.text.schema`로 결과 구조를 지정합니다. 스키마의 `maxItems: 150`을 제거하자 실제 400 오류가 해소됐으며, 서버의 최대 150개 검증은 유지했습니다.
+- 모델 조회·생성 요청·응답 본문 수신에 걸쳐 25초 제한을 적용합니다.
+- Supabase Dashboard에서 테스트한 파일과 편집기 코드가 일치함을 확인하고 배포했습니다. 운영 CSV Maker에 검증용 PNG를 업로드하여 apple/사과, banana/바나나, take care of/돌보다, involve/수반하다·포함하다 4개 항목이 모두 표시되는 것을 확인했습니다. 사용자의 원래 사진과 약 80개 분량의 실제 추출은 별도 확인이 필요합니다.
+- 새 회귀 테스트 9개 통과. 전체 CSV Maker 테스트는 19개 통과, 기존 경로 문제로 1개 skip입니다. 본앱 core·smoke 검사도 통과했습니다. 테스트는 실제 Edge Function 소스를 실행하며 외부 fetch만 대체합니다(Node.js 24).
+- 별도 Reviewer가 실제 diff와 테스트를 검토했으며, 배포를 막을 문제는 발견하지 못했습니다. API 키나 이미지 원문을 새로 기록하지 않습니다.
+- 공식 API 근거: [모델 목록과 페이지 처리](https://ai.google.dev/api/models), [REST 구조화 출력](https://ai.google.dev/gemini-api/docs/generate-content/structured-output?hl=en).
+
 ## 2026-07-19 작업 기록
 
 - CSV Maker 구현 및 GitHub Pages 배포 완료.
