@@ -55,7 +55,7 @@ MAX_REQUEST_BYTES
 
 - 23.8초 영상의 마지막 안내는 API 키 오류가 아닌 추출 시간 초과였습니다. 4개 샘플 성공만으로 80개 사진의 정상 동작까지 검증하지 못한 한계를 확인했습니다.
 - Gemini 추출 제한을 25초에서 90초로 늘리고, Gemini 3 이상은 `LOW`, 2.5는 추론 예산 0을 지정했습니다. 실제 호출에서 Gemini 3.8 Flash가 `MINIMAL`을 지원하지 않아 HTTP 400을 반환한 것을 확인한 뒤 `LOW`로 수정했습니다. 수정한 함수를 운영 서버에 배포한 뒤 사용자가 전달한 원본 사진으로 추출에 성공했습니다. 영어 80개가 원본 순서와 일치하고 누락·중복이 없으며 한글 뜻 빈칸도 0개임을 확인했습니다. 한글 뜻은 일부 동의어로 정리되어 원문 필기와 완전히 같다는 의미는 아닙니다.
-- 원본 사진 추출 성공 후 모바일 iPhone Safari의 같은 사진 요청이 91.4초 만에 503으로 종료된 운영 기록을 확인했습니다. 서버의 기존 90초 타이머가 원인이어서 제한을 120초로 늘리고, 타임아웃 진단 로그를 추가했습니다. Gemini 3 문서의 지연 안내에 따라 고정 `temperature: 0`도 제거했습니다. Supabase 무료 함수 한도는 150초이며, 화면 안내도 약 2분으로 맞췄습니다.
+- 원본 사진 추출 성공 후 모바일 iPhone Safari의 같은 사진 요청이 91.4초 만에 503으로 종료된 운영 기록을 확인했습니다. 서버의 기존 90초 타이머가 원인이어서 제한을 120초로 늘리고, 타임아웃 진단 로그를 추가했습니다. 재시도도 120초 제한까지 걸려, 공식 문서가 문서 추출용 저지연으로 안내하는 Gemini 3.5 Flash-Lite를 우선 선택하고 최소 추론 설정을 적용했습니다. 기존 Flash를 대체 후보로 유지합니다. Gemini 3 문서의 지연 안내에 따라 고정 `temperature: 0`도 제거했습니다. Supabase 무료 함수 한도는 150초이며, 화면 안내도 약 2분으로 맞췄습니다.
 - 동일 사용자 인증 갱신 때 사진·추출·편집 화면을 유지합니다. 계정이 바뀌면 이전 사진/결과를 비우며, 파일 읽기·추출 완료 사이에 인증이 바뀐 요청도 중단합니다.
 - 로그인·로그아웃과 동기화 응답의 순서가 뒤바뀌어도 이전 계정의 결과를 현재 화면/저장 키에 적용하지 않도록 인증 세대를 검사합니다. Chrome에서 지연 로그인→로그아웃→이전 응답 도착 시 화면이 유지되는 것을 확인했습니다.
 - iPhone 영상의 인증 이벤트 자체가 A→로그아웃→A로 바뀐 원인은 아직 확정하지 않았습니다. 이번 변경은 확인된 경쟁 조건과 불필요한 화면 초기화를 막습니다.
@@ -70,7 +70,7 @@ MAX_REQUEST_BYTES
 - Supabase Dashboard에서 테스트한 파일과 편집기 코드가 일치함을 확인하고 배포했습니다. 운영 CSV Maker에 검증용 PNG를 업로드하여 apple/사과, banana/바나나, take care of/돌보다, involve/수반하다·포함하다 4개 항목이 모두 표시되는 것을 확인했습니다. 이후 위 보완 항목에서 사용자의 원본 80개 사진도 검증했습니다.
 - 새 회귀 테스트 9개 통과. 전체 CSV Maker 테스트는 19개 통과, 기존 경로 문제로 1개 skip입니다. 본앱 core·smoke 검사도 통과했습니다. 테스트는 실제 Edge Function 소스를 실행하며 외부 fetch만 대체합니다(Node.js 24).
 - 별도 Reviewer가 실제 diff와 테스트를 검토했으며, 배포를 막을 문제는 발견하지 못했습니다. API 키나 이미지 원문을 새로 기록하지 않습니다.
-- 공식 API 근거: [모델 목록과 페이지 처리](https://ai.google.dev/api/models), [REST 구조화 출력](https://ai.google.dev/gemini-api/docs/generate-content/structured-output?hl=en), [Gemini thinking 및 지연 안내](https://ai.google.dev/gemini-api/docs/troubleshooting), [Supabase Edge Function 시간 한도](https://supabase.com/docs/guides/functions/limits).
+- 공식 API 근거: [모델 목록과 페이지 처리](https://ai.google.dev/api/models), [REST 구조화 출력](https://ai.google.dev/gemini-api/docs/generate-content/structured-output?hl=en), [Gemini thinking 및 지연 안내](https://ai.google.dev/gemini-api/docs/troubleshooting), [Gemini 3.5 Flash-Lite 문서](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite), [Supabase Edge Function 시간 한도](https://supabase.com/docs/guides/functions/limits).
 
 ## 2026-07-19 작업 기록
 

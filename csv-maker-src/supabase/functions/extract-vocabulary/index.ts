@@ -84,8 +84,9 @@ async function resolveGeminiModel(key: string, signal?: AbortSignal, avoidModel?
     }
     pageToken = payload.nextPageToken;
   } while (pageToken);
-  // Prefer stable, full Flash over preview/Lite variants, then the newest version.
+  // Prefer the stable low-latency document model, then stable full Flash.
   usable.sort((a, b) => Number(/preview|exp/i.test(a)) - Number(/preview|exp/i.test(b))
+    || Number(b.toLowerCase() === 'models/gemini-3.5-flash-lite') - Number(a.toLowerCase() === 'models/gemini-3.5-flash-lite')
     || Number(/lite/i.test(a)) - Number(/lite/i.test(b)) || b.localeCompare(a, 'en', { numeric: true }));
   if (!usable.length) throw new GeminiDiscoveryError(Response.json({ error: { status: 'NOT_FOUND', message: 'No available Flash model for vocabulary extraction' } }, { status: 503 }));
   selectedGeminiModel = usable.find((name) => name !== avoidModel) ?? usable[0];
@@ -108,9 +109,9 @@ async function requestGemini(mimeType: string, data: string) {
           contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
           generationConfig: {
             responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: responseSchema } },
-            thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'LOW' },
+            thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: /^models\/gemini-3\.5-flash-lite$/i.test(model) ? 'MINIMAL' : 'LOW' },
             maxOutputTokens: 16384,
-                      },
+          },
         }),
       });
       // Keep the timeout active until the response body has also been received.
