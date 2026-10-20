@@ -97,7 +97,7 @@ async function requestGemini(mimeType: string, data: string) {
   const key = Deno.env.get('GEMINI_API_KEY_PRIMARY');
   if (!key) throw new Error('gemini key missing');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 90_000);
+  const timeout = setTimeout(() => controller.abort(), 120_000);
   try {
     let avoidModel: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -110,8 +110,7 @@ async function requestGemini(mimeType: string, data: string) {
             responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: responseSchema } },
             thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'LOW' },
             maxOutputTokens: 16384,
-            temperature: 0,
-          },
+                      },
         }),
       });
       // Keep the timeout active until the response body has also been received.
@@ -258,8 +257,9 @@ Deno.serve(async (request) => {
     }
     return reply(origin, 200, result);
   } catch (error) {
-    await refundQuota(consumedQuota);
     const isTimeout = error instanceof DOMException && error.name === 'AbortError';
+    if (isTimeout) console.error(JSON.stringify({ event: 'gemini_request_timeout', timeoutMs: 120_000, model: selectedGeminiModel }));
+    await refundQuota(consumedQuota);
     return reply(origin, 503, { error: isTimeout ? 'extraction_timeout' : 'temporarily_unavailable', message: isTimeout ? '시간이 걸리고 있어요. 잠시 뒤 다시 시도해 주세요.' : '지금은 요청을 처리하지 못했어요. 잠시 뒤 다시 시도해 주세요.' });
   }
 });

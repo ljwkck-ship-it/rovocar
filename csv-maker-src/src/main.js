@@ -107,7 +107,7 @@ function renderPreview() {
     <ul class="checklist"><li>영어와 한글 뜻이 모두 보이나요?</li><li>흐림, 그림자, 손가락이 글자를 가리지 않나요?</li><li>종이가 가능한 한 반듯하게 찍혔나요?</li></ul>
     <div class="button-row"><button class="secondary" id="rotate">↻ 회전</button><label class="secondary file-label" for="replacePhoto">다시 선택</label><input class="sr-only" id="replacePhoto" type="file" accept="image/jpeg,image/png,image/webp"></div>
     <button class="primary wide" id="extract">단어 추출하기 <span>→</span></button>
-    ${status(supabase ? '사진 속 단어가 많으면 추출에 1분 정도 걸릴 수 있어요.' : '현재는 로컬 데모 결과를 보여 줍니다.', 'info')}
+    ${status(supabase ? '사진에 단어가 많으면 추출에 2분 정도 걸릴 수 있어요.' : '현재는 로컬 데모 결과를 보여 줍니다.', 'info')}
   </section>`;
   document.querySelector('#rotate').addEventListener('click', () => { state.rotation = (state.rotation + 90) % 360; renderPreview(); });
   document.querySelector('#replacePhoto').addEventListener('change', onChooseFile);
@@ -134,7 +134,7 @@ async function extractFromServer() {
 async function renderExtracting() {
   const revision = sessionRevision;
   setStep('추출 중');
-  app.innerHTML = `<section class="center-state"><div class="scan-mark" aria-hidden="true"></div><p class="eyebrow">사진을 읽는 중</p><h1>영어와 뜻을<br>나누고 있어요.</h1><div class="extract-progress" role="progressbar" aria-label="단어 추출 진행 중" aria-valuemin="0" aria-valuemax="100"><span></span></div>${status('같은 사진을 다시 보내지 않도록 잠시만 기다려 주세요.')}</section>`;
+  app.innerHTML = `<section class="center-state"><div class="scan-mark" aria-hidden="true"></div><p class="eyebrow">사진을 읽는 중</p><h1>영어와 뜻을<br>나누고 있어요.</h1><div class="extract-progress" role="progressbar" aria-label="단어 추출 진행 중" aria-valuemin="0" aria-valuemax="100"><span></span></div>${status('많은 단어를 읽을 때는 2분 정도 걸릴 수 있어요. 화면을 닫지 말고 기다려 주세요.')}</section>`;
   try {
     if (supabase) {
       if (!session) { renderError('다시 로그인해 주세요', '사진을 읽으려면 로그인 상태가 필요합니다.', renderStart); return; }
