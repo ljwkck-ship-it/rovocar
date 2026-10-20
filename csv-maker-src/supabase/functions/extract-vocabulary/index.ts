@@ -108,7 +108,7 @@ async function requestGemini(mimeType: string, data: string) {
           contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
           generationConfig: {
             responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: responseSchema } },
-            thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'MINIMAL' },
+            thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'LOW' },
             maxOutputTokens: 16384,
             temperature: 0,
           },

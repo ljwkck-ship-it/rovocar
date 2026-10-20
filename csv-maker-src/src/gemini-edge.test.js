@@ -112,7 +112,7 @@ test('vocabulary OCR minimizes reasoning on Gemini 3 to leave time for all rows'
     return Response.json({});
   });
   await run("requestGemini('image/png', 'YWJj')");
-  assert.equal(config.thinkingConfig?.thinkingLevel, 'MINIMAL');
+  assert.equal(config.thinkingConfig?.thinkingLevel, 'LOW');
 });
 
 test('an 80-row response completing after 40 seconds fits within the request deadline', async () => {
