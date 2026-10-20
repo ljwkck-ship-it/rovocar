@@ -13,6 +13,7 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 const csvMakerUrl = new URL('.', window.location.href).href;
 const rovocarHomeUrl = new URL('../', csvMakerUrl).href;
 let session = null;
+let sessionRevision = 0;
 let sampleRows = [
   { english: 'take care of', korean: '돌보다' },
   { english: 'involve', korean: '수반하다, 포함하다' },
@@ -106,7 +107,7 @@ function renderPreview() {
     <ul class="checklist"><li>영어와 한글 뜻이 모두 보이나요?</li><li>흐림, 그림자, 손가락이 글자를 가리지 않나요?</li><li>종이가 가능한 한 반듯하게 찍혔나요?</li></ul>
     <div class="button-row"><button class="secondary" id="rotate">↻ 회전</button><label class="secondary file-label" for="replacePhoto">다시 선택</label><input class="sr-only" id="replacePhoto" type="file" accept="image/jpeg,image/png,image/webp"></div>
     <button class="primary wide" id="extract">단어 추출하기 <span>→</span></button>
-    ${status('현재는 안전한 로컬 데모 결과를 보여 줍니다. 실제 OCR 연결 전에는 로그인과 사용량 확인이 필요합니다.', 'info')}
+    ${status(supabase ? '사진 속 단어가 많으면 추출에 1분 정도 걸릴 수 있어요.' : '현재는 로컬 데모 결과를 보여 줍니다.', 'info')}
   </section>`;
   document.querySelector('#rotate').addEventListener('click', () => { state.rotation = (state.rotation + 90) % 360; renderPreview(); });
   document.querySelector('#replacePhoto').addEventListener('change', onChooseFile);
@@ -118,25 +119,30 @@ async function fileAsBase64(file) {
   return String(url).split(',', 2)[1];
 }
 async function extractFromServer() {
+  const file = state.file, revision = sessionRevision, userId = session?.user?.id;
+  const isCurrent = () => revision === sessionRevision && session?.user?.id === userId;
   const { data: { session: currentSession } } = await supabase.auth.getSession();
-  if (!currentSession) throw { error: 'authentication_required' };
+  if (!currentSession || !file || !isCurrent() || currentSession.user.id !== userId) throw { error: 'authentication_required' };
   session = currentSession;
-  const data = await fileAsBase64(state.file);
-  const response = await fetch(`${supabaseUrl}/functions/v1/extract-vocabulary`, { method: 'POST', headers: { authorization: `Bearer ${session.access_token}`, 'content-type': 'application/json' }, body: JSON.stringify({ image: { mimeType: state.file.type, data } }) });
+  const data = await fileAsBase64(file);
+  if (!isCurrent()) throw { error: 'authentication_required' };
+  const response = await fetch(`${supabaseUrl}/functions/v1/extract-vocabulary`, { method: 'POST', headers: { authorization: `Bearer ${currentSession.access_token}`, 'content-type': 'application/json' }, body: JSON.stringify({ image: { mimeType: file.type, data } }) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw { ...payload, error: payload.error || (response.status === 401 ? 'authentication_required' : 'extraction_unavailable') };
   return payload;
 }
 async function renderExtracting() {
+  const revision = sessionRevision;
   setStep('추출 중');
   app.innerHTML = `<section class="center-state"><div class="scan-mark" aria-hidden="true"></div><p class="eyebrow">사진을 읽는 중</p><h1>영어와 뜻을<br>나누고 있어요.</h1><div class="extract-progress" role="progressbar" aria-label="단어 추출 진행 중" aria-valuemin="0" aria-valuemax="100"><span></span></div>${status('같은 사진을 다시 보내지 않도록 잠시만 기다려 주세요.')}</section>`;
   try {
     if (supabase) {
       if (!session) { renderError('다시 로그인해 주세요', '사진을 읽으려면 로그인 상태가 필요합니다.', renderStart); return; }
-      const result = await extractFromServer(); state.rows = result.items; state.warnings = result.warnings; renderReview(); return;
+      const result = await extractFromServer(); if (revision !== sessionRevision) return; state.rows = result.items; state.warnings = result.warnings; renderReview(); return;
     }
     window.setTimeout(() => { state.rows = structuredClone(demoRows); state.warnings = ['사진 오른쪽 가장자리의 한 행은 잘렸을 수 있어요.']; renderReview(); }, 1050);
   } catch (error) {
+    if (revision !== sessionRevision) return;
     const message = error?.error === 'daily_limit' ? '가족용 오늘 사용 횟수를 모두 썼어요. 내일 다시 시도해 주세요.' : error?.error === 'unsupported_image' || error?.error === 'image_too_large' || error?.error === 'server_configuration' || error?.error === 'gemini_access_denied' || error?.error === 'gemini_rate_limited' || error?.error === 'invalid_extraction' || error?.error === 'extraction_timeout' || error?.error === 'extraction_unavailable' ? error.message : error?.error === 'authentication_required' ? '로그인이 만료되었어요. 다시 로그인해 주세요.' : '사진을 읽지 못했어요. 잠시 뒤 다시 시도하거나 사진을 바꿔 주세요.';
     renderError('추출을 완료하지 못했어요', message, renderPreview);
   }
@@ -207,8 +213,19 @@ function renderError(title, detail, back = renderStart) {
   app.innerHTML = `<section class="center-state error-state"><p class="error-symbol" aria-hidden="true">!</p><p class="eyebrow">사진을 확인해 주세요</p><h1 id="errorTitle" tabindex="-1">${escapeHtml(title)}</h1><p class="lede">${escapeHtml(detail)}</p><button class="primary" id="tryAgain">사진 다시 선택</button><button class="text-button" id="goBack">돌아가기</button></section>`;
   document.querySelector('#errorTitle').focus(); document.querySelector('#tryAgain').addEventListener('click', renderStart); document.querySelector('#goBack').addEventListener('click', back);
 }
+function onAuthSessionChanged(_event, nextSession) {
+  const previousUser = session?.user?.id;
+  session = nextSession;
+  if (previousUser === nextSession?.user?.id) return;
+  sessionRevision++;
+  revokePreview();
+  state.file = null;
+  state.rows = [];
+  state.warnings = [];
+  renderStart();
+}
 window.addEventListener('beforeunload', revokePreview);
 await updateSession();
 await loadSampleRows();
-if (supabase) supabase.auth.onAuthStateChange((_event, nextSession) => { session = nextSession; renderStart(); });
+if (supabase) supabase.auth.onAuthStateChange(onAuthSessionChanged);
 renderStart();

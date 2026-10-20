@@ -6,8 +6,8 @@ import vm from 'node:vm';
 
 // Test the deployed code, replacing only the external service boundary.
 const source = stripTypeScriptTypes(readFileSync(new URL('../supabase/functions/extract-vocabulary/index.ts', import.meta.url), 'utf8').replace(/^import .*createClient.*;$/m, ''));
-function edge(fetch) {
-  const context = vm.createContext({ fetch, Response, URL, AbortController, setTimeout, clearTimeout, console, Deno: { env: { get: () => 'test-key' }, serve() {} } });
+function edge(fetch, timer = {}) {
+  const context = vm.createContext({ fetch, Response, URL, AbortController, setTimeout, clearTimeout, console, Deno: { env: { get: () => 'test-key' }, serve() {} }, ...timer });
   vm.runInContext(source, context);
   return (expression) => vm.runInContext(expression, context);
 }
@@ -101,4 +101,29 @@ test('503 high demand retries once on another available Flash model', async () =
 test('OCR selects versioned Gemini Flash rather than the Omni family', async () => {
   const run = edge(async () => Response.json({ models: [model('gemini-omni-1.1-flash'), model('gemini-3.8-flash')] }));
   assert.equal(await run("resolveGeminiModel('test-key')"), 'models/gemini-3.8-flash');
+});
+
+
+test('vocabulary OCR minimizes reasoning on Gemini 3 to leave time for all rows', async () => {
+  let config;
+  const run = edge(async (_url, options) => {
+    if (options.method !== 'POST') return Response.json({ models: [model('gemini-3.8-flash')] });
+    config = JSON.parse(options.body).generationConfig;
+    return Response.json({});
+  });
+  await run("requestGemini('image/png', 'YWJj')");
+  assert.equal(config.thinkingConfig?.thinkingLevel, 'MINIMAL');
+});
+
+test('an 80-row response completing after 40 seconds fits within the request deadline', async () => {
+  let deadline;
+  const rows = Array.from({length:80},(_,i)=>({english:`word${i}`,korean:`meaning${i}`}));
+  const run = edge(async (_url, options) => {
+    if (options.method !== 'POST') return Response.json({ models: [model('gemini-3.8-flash')] });
+    if (deadline <= 40_000) throw new DOMException('deadline reached','AbortError');
+    return Response.json({candidates:[{content:{parts:[{text:JSON.stringify({items:rows,warnings:[]})}]}}]});
+  }, {setTimeout(_fn,ms){deadline=ms;return 1;},clearTimeout(){}});
+  const response = await run("requestGemini('image/png', 'YWJj')");
+  assert.equal(response.status,200);
+  assert.equal(JSON.parse((await response.json()).candidates[0].content.parts[0].text).items.length,80);
 });

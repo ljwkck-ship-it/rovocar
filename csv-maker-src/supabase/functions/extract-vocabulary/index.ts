@@ -97,7 +97,7 @@ async function requestGemini(mimeType: string, data: string) {
   const key = Deno.env.get('GEMINI_API_KEY_PRIMARY');
   if (!key) throw new Error('gemini key missing');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), 90_000);
   try {
     let avoidModel: string | undefined;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -108,6 +108,7 @@ async function requestGemini(mimeType: string, data: string) {
           contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType, data } }] }],
           generationConfig: {
             responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: responseSchema } },
+            thinkingConfig: /^models\/gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: 'MINIMAL' },
             maxOutputTokens: 16384,
             temperature: 0,
           },

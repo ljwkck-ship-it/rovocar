@@ -1,5 +1,5 @@
-const CACHE='rovocar-v25';
-const FILES=['./','index.html','admin.html','csv-maker/index.html','admin.css?v=1','admin.js?v=1','styles.css?v=8','core.mjs','app.js?v=22','cloud.js?v=6','supabase-config.js?v=1','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv'];
+const CACHE='rovocar-v26';
+const FILES=['./','index.html','admin.html','csv-maker/index.html','admin.css?v=1','admin.js?v=1','styles.css?v=8','core.mjs','app.js?v=23','cloud.js?v=7','supabase-config.js?v=1','manifest.webmanifest','assets/rovocar.svg','assets/icon-180.png','assets/icon-192.png','assets/icon-512.png','data/default.csv'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('message',e=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();});

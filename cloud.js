@@ -8,6 +8,14 @@ import { dataSnapshot, syncPlan } from './core.mjs';
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   }) : null;
   let user = null;
+  let userRevision = 0;
+  function setUser(nextUser) {
+    if (user?.id !== nextUser?.id) userRevision++;
+    user = nextUser;
+  }
+  function checkUser(revision) {
+    if (revision !== userRevision || !user) throw new Error('authentication_changed');
+  }
   let syncing = false;
   const dirtyKey = () => user ? `${DIRTY_KEY}:${user.id}` : DIRTY_KEY;
   const snapshotKey = () => user ? `rovocar:cloud-snapshot:v1:${user.id}` : 'rovocar:cloud-snapshot:v1';
@@ -33,16 +41,20 @@ import { dataSnapshot, syncPlan } from './core.mjs';
     const { error } = await client.auth.signOut();
     if (error) throw error;
   }
-  async function pull() {
+  async function pull(revision = userRevision) {
     if (!client || !user) return null;
     const { data: decks, error: deckError } = await client.from('decks').select('id,name,created_at,order_index').order('order_index');
+    checkUser(revision);
     if (deckError) throw deckError;
     let { data: words, error: wordError } = await client.from('words').select('id,deck_id,english,korean,attempts,correct,registry_no,mode_stats,order_index').order('order_index');
+    checkUser(revision);
     if (wordError && /mode_stats/i.test(wordError.message || '')) {
       ({ data: words, error: wordError } = await client.from('words').select('id,deck_id,english,korean,attempts,correct,registry_no,order_index').order('order_index'));
     }
+    checkUser(revision);
     if (wordError) throw wordError;
     const { data: registryRows, error: registryError } = await client.from('vocabulary_registry').select('english_normalized,registry_no');
+    checkUser(revision);
     if (registryError) throw registryError;
     const grouped = new Map();
     for (const word of words || []) {
@@ -51,41 +63,51 @@ import { dataSnapshot, syncPlan } from './core.mjs';
     }
     return { decks:(decks || []).map(deck => ({ id: deck.id, name: deck.name, createdAt: deck.created_at, words: grouped.get(deck.id) || [] })), registry:Object.fromEntries((registryRows||[]).map(row=>[row.english_normalized,row.registry_no])) };
   }
-  async function push(decks, registry) {
+  async function push(decks, registry, revision = userRevision) {
     if (!client || !user || !navigator.onLine) return false;
     const { error } = await client.rpc('replace_user_data', { payload: { decks, registry } });
+    checkUser(revision);
     if (error) throw error;
-    const persisted=await pull();
+    const persisted=await pull(revision);
+    checkUser(revision);
     rememberSnapshot(persisted.decks,persisted.registry);
     localStorage.removeItem(dirtyKey());
     return persisted;
   }
   async function sync(decks, registry = {}, options = {}) {
-    if (!client || !user || syncing) return null;
+    if (!client || !user) return null;
+    const revision = userRevision;
+    while (syncing) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      if (revision !== userRevision) return null;
+    }
     if (!navigator.onLine) { localStorage.setItem(dirtyKey(), '1'); emit({ type: 'offline', user: publicUser(user) }); return null; }
     syncing = true; emit({ type: 'syncing', user: publicUser(user) });
     try {
       const isFirstLogin = !localStorage.getItem(migrationKey());
       const isDirty = localStorage.getItem(dirtyKey()) === '1' || options.forcePush;
-      const remote = await pull();
+      const remote = await pull(revision);
+      checkUser(revision);
       let result = null;
       const plan=syncPlan({isFirstLogin,localDeckCount:decks.length,remoteDeckCount:remote.decks.length,isDirty,remoteChanged:remoteChanged(remote),forcePush:options.forcePush});
       if (plan==='migration-choice') return { kind:'migration-choice', remote };
       if (plan==='conflict') return { kind:'conflict', remote };
       if (isFirstLogin) {
         if (plan==='pull') { rememberSnapshot(remote.decks,remote.registry); result = remote; }
-        else result=await push(decks,registry);
+        else result=await push(decks,registry,revision);
+        checkUser(revision);
         localStorage.setItem(migrationKey(), '1');
-      } else if (plan==='push') result=await push(decks,registry);
+      } else if (plan==='push') result=await push(decks,registry,revision);
       else { rememberSnapshot(remote.decks,remote.registry); result = remote; }
+      checkUser(revision);
       emit({ type: 'synced', user: publicUser(user) });
       return result;
     } catch (error) {
+      if (revision !== userRevision) return null;
       localStorage.setItem(dirtyKey(), '1'); emit({ type: 'error', error: error.message, user: publicUser(user) }); throw error;
     } finally { syncing = false; }
   }
   async function flush(decks, registry = {}) {
-    while (syncing) await new Promise(resolve => setTimeout(resolve, 50));
     return sync(decks, registry);
   }
   async function resolveDataChoice(choice, decks, registry, remote) {
@@ -96,14 +118,15 @@ import { dataSnapshot, syncPlan } from './core.mjs';
   function markDirty() { localStorage.setItem(dirtyKey(), '1'); }
   async function recordVisit() {
     if (!client || !user || sessionStorage.getItem(`rovocar:visit:${user.id}`)) return;
+    const revision = userRevision, userId = user.id;
     const { error } = await client.rpc('record_visit', { display_name_input: publicUser(user).name });
-    if (!error) sessionStorage.setItem(`rovocar:visit:${user.id}`, '1');
+    if (!error && revision === userRevision) sessionStorage.setItem(`rovocar:visit:${userId}`, '1');
   }
   async function init() {
     if (!client) { emit({ type: 'unconfigured' }); return null; }
-    const { data } = await client.auth.getSession(); user = data.session?.user || null;
+    const { data } = await client.auth.getSession(); setUser(data.session?.user || null);
     if(user)recordVisit();emit({ type: 'auth', user: publicUser(user) });
-    client.auth.onAuthStateChange((_event, session) => { user = session?.user || null;if(user)recordVisit();emit({ type: 'auth', user: publicUser(user) }); });
+    client.auth.onAuthStateChange((_event, session) => { setUser(session?.user || null);if(user)recordVisit();emit({ type: 'auth', user: publicUser(user) }); });
     window.addEventListener('online', () => emit({ type: 'online', user: publicUser(user) }));
     return publicUser(user);
   }
